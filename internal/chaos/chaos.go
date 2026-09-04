@@ -123,12 +123,21 @@ func (tg *TrafficGenerator) Stop() {
 	tg.metrics.EndTime = time.Now()
 }
 
-// GetMetrics returns a copy of the current metrics (safe for concurrent access).
-func (tg *TrafficGenerator) GetMetrics() Metrics {
+// GetMetrics returns a snapshot of the current metrics (safe for concurrent access).
+// Returns a pointer to avoid copying the internal mutex.
+func (tg *TrafficGenerator) GetMetrics() *Metrics {
 	tg.metrics.mu.Lock()
 	defer tg.metrics.mu.Unlock()
-	// Return a deep copy to avoid deadlock when Report() is called on the result.
-	metricsCopy := *tg.metrics
+	// Create a new Metrics struct without copying the mutex.
+	metricsCopy := &Metrics{
+		TotalRequests: tg.metrics.TotalRequests,
+		Succeeded:     tg.metrics.Succeeded,
+		Failed:        tg.metrics.Failed,
+		Retried:       tg.metrics.Retried,
+		DataLoss:      tg.metrics.DataLoss,
+		StartTime:     tg.metrics.StartTime,
+		EndTime:       tg.metrics.EndTime,
+	}
 	metricsCopy.FailedRequests = make([]FailedRequest, len(tg.metrics.FailedRequests))
 	copy(metricsCopy.FailedRequests, tg.metrics.FailedRequests)
 	return metricsCopy
