@@ -12,7 +12,11 @@
       "Shell(curl -s http://localhost:8081/get?key=forward-test)",
       "Shell(curl -s -X DELETE http://localhost:8082/delete?key=forward-test)",
       "Shell(curl -s http://localhost:8080/get?key=forward-test)",
-      "Shell(git:*)"
+      "Shell(git:*)",
+      "Shell(cd \"C:\\Users\\arpan.ARPAN\\Desktop\\projects\\self healing distributed cache\" && git commit -F - <<'EOF' Initial commit: Self-Healing Distributed Cache Complete distributed cache implementation with: - Consistent hashing with virtual nodes - Async replication with TTL consistency - SWIM-based failure detection via memberlist - Server-side routing with health-aware failover - Pull-before-drop rebalancing - LRU eviction policy - Quorum consistency mode - Chaos test harness - CI/CD with GitHub Actions - Docker containerization - Deployment documentation All phases (0-9) complete with passing tests. Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(del:*)",
+      "Shell(gofmt:*)",
+      "Shell(cd \"C:\\Users\\arpan.ARPAN\\Desktop\\projects\\self healing distributed cache\" && git add -A && git commit -F - <<'EOF' Fix: Format Go files and update CI workflow - Format all Go source files with gofmt - Fix CI: only run tests/coverage on internal/ packages - This resolves the covdata error from cmd/ packages Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)"
     ],
     "deny": [],
     "defaultMode": "default"

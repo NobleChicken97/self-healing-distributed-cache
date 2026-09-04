@@ -196,8 +196,8 @@ func (s *Server) handleRebalancePull(w http.ResponseWriter, r *http.Request) {
 
 	// Return the value and expiry to the new owner.
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"key":          key,
-		"value":        value,
+		"key":           key,
+		"value":         value,
 		"expires_at_ms": expiry.UnixMilli(),
 	})
 }
@@ -801,10 +801,10 @@ func (s *Server) handleQuorumSet(w http.ResponseWriter, r *http.Request) {
 	if ackCount < quorumNeeded {
 		s.logger.Printf("[QUORUM] write failed: got %d acks, needed %d: %v", ackCount, quorumNeeded, lastErr)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"status":      "quorum_failed",
-			"acks":        ackCount,
-			"needed":      quorumNeeded,
-			"error":       lastErr,
+			"status": "quorum_failed",
+			"acks":   ackCount,
+			"needed": quorumNeeded,
+			"error":  lastErr,
 		})
 		return
 	}
@@ -908,10 +908,10 @@ func (s *Server) handleQuorumGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"key":      key,
-		"value":    best.value,
-		"version":  best.version,
-		"from":     best.nodeID,
+		"key":     key,
+		"value":   best.value,
+		"version": best.version,
+		"from":    best.nodeID,
 	})
 }
 

@@ -24,15 +24,15 @@ type entry struct {
 
 // Store is an in-memory key-value store with TTL and optional LRU eviction.
 type Store struct {
-	mu          sync.RWMutex
-	entries     map[string]entry
-	interval    time.Duration
-	stop        chan struct{}
-	stopped     chan struct{}
+	mu       sync.RWMutex
+	entries  map[string]entry
+	interval time.Duration
+	stop     chan struct{}
+	stopped  chan struct{}
 	// LRU fields (nil if eviction disabled)
-	memCap      int64 // Maximum memory in bytes; 0 = unlimited
-	currentMem  int64 // Current estimated memory usage
-	lruList     *list.List // Front = most recent, Back = least recent
+	memCap     int64      // Maximum memory in bytes; 0 = unlimited
+	currentMem int64      // Current estimated memory usage
+	lruList    *list.List // Front = most recent, Back = least recent
 }
 
 // New creates a store with TTL sweep but no eviction (unlimited memory).

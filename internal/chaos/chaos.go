@@ -22,15 +22,15 @@ import (
 
 // Metrics tracks the results of a chaos test run.
 type Metrics struct {
-	mu              sync.Mutex
-	TotalRequests   int64
-	Succeeded       int64
-	Failed          int64
-	Retried         int64
-	DataLoss        int64 // Keys that were SET but later GET returned 404
-	FailedRequests  []FailedRequest
-	StartTime       time.Time
-	EndTime         time.Time
+	mu             sync.Mutex
+	TotalRequests  int64
+	Succeeded      int64
+	Failed         int64
+	Retried        int64
+	DataLoss       int64 // Keys that were SET but later GET returned 404
+	FailedRequests []FailedRequest
+	StartTime      time.Time
+	EndTime        time.Time
 }
 
 // FailedRequest records details of a failed request for debugging.
@@ -44,16 +44,16 @@ type FailedRequest struct {
 
 // TrafficGenerator continuously issues Set/Get requests against a cluster.
 type TrafficGenerator struct {
-	nodeAddrs     []string
-	keys          []string
-	interval      time.Duration
-	timeout       time.Duration
-	maxRetries    int
-	client        *http.Client
-	metrics       *Metrics
-	stop          chan struct{}
-	wg            sync.WaitGroup
-	logger        *log.Logger
+	nodeAddrs  []string
+	keys       []string
+	interval   time.Duration
+	timeout    time.Duration
+	maxRetries int
+	client     *http.Client
+	metrics    *Metrics
+	stop       chan struct{}
+	wg         sync.WaitGroup
+	logger     *log.Logger
 }
 
 // TrafficConfig configures the traffic generator.

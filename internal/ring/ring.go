@@ -26,11 +26,11 @@ type Node struct {
 
 // Ring maps keys to nodes using consistent hashing with virtual nodes.
 type Ring struct {
-	mu            sync.RWMutex
-	nodes         map[string]Node   // nodeID -> Node
-	points        []uint32          // sorted hash values
-	pointToNode   map[uint32]string // hash -> nodeID
-	virtualNodes  int               // virtual nodes per physical node
+	mu           sync.RWMutex
+	nodes        map[string]Node   // nodeID -> Node
+	points       []uint32          // sorted hash values
+	pointToNode  map[uint32]string // hash -> nodeID
+	virtualNodes int               // virtual nodes per physical node
 }
 
 // New creates a ring with the specified number of virtual nodes per physical node.

@@ -35,9 +35,9 @@ type Migration struct {
 
 // RebalanceRequest is used to trigger a rebalance from outside.
 type RebalanceRequest struct {
-	LocalNodeID   string
-	OldOwnerAddr  string
-	LocalKeys     []string
+	LocalNodeID  string
+	OldOwnerAddr string
+	LocalKeys    []string
 }
 
 type MigrationStatus int
@@ -69,24 +69,24 @@ func (s MigrationStatus) String() string {
 
 // Result summarizes a rebalance operation.
 type Result struct {
-	TotalKeys    int
-	MovedKeys    int
-	FailedKeys   int
-	Duration     time.Duration
-	Migrations   []Migration
-	StartedAt    time.Time
-	CompletedAt  time.Time
+	TotalKeys   int
+	MovedKeys   int
+	FailedKeys  int
+	Duration    time.Duration
+	Migrations  []Migration
+	StartedAt   time.Time
+	CompletedAt time.Time
 }
 
 // Rebalancer orchestrates key migration when the ring topology changes.
 type Rebalancer struct {
-	ring          *ring.Ring
-	transport     http.RoundTripper
-	logger        *log.Logger
-	mu            sync.Mutex
-	inProgress    bool
-	lastResult    *Result
-	migrations    []Migration
+	ring       *ring.Ring
+	transport  http.RoundTripper
+	logger     *log.Logger
+	mu         sync.Mutex
+	inProgress bool
+	lastResult *Result
+	migrations []Migration
 }
 
 // New creates a Rebalancer for the given ring.
@@ -140,9 +140,9 @@ func (rb *Rebalancer) Rebalance(localNodeID string, oldOwnerAddr string, localKe
 		// If the new owner is not this node, the key needs to move.
 		if owner.ID != localNodeID {
 			migrations = append(migrations, Migration{
-				Key:      key,
-				NewOwner: owner,
-				Status:   MigrationPending,
+				Key:       key,
+				NewOwner:  owner,
+				Status:    MigrationPending,
 				Timestamp: time.Now(),
 			})
 		}
@@ -229,8 +229,8 @@ func (rb *Rebalancer) ExecuteMigration(m *Migration, oldOwnerAddr string) error 
 	// Step 2: Push the value and expiry to the new owner.
 	acceptURL := fmt.Sprintf("http://%s/rebalance/accept?key=%s", m.NewOwner.Addr, url.QueryEscape(m.Key))
 	pushBody, _ := json.Marshal(map[string]interface{}{
-		"key":         result.Key,
-		"value":       result.Value,
+		"key":           result.Key,
+		"value":         result.Value,
 		"expires_at_ms": result.ExpiresAt,
 	})
 

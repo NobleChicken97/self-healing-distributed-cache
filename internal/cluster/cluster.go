@@ -16,9 +16,9 @@ import (
 
 // Event represents a cluster membership event.
 type Event struct {
-	Timestamp time.Time
-	Node      string
-	Type      EventType
+	Timestamp  time.Time
+	Node       string
+	Type       EventType
 	DetectedBy string
 }
 
@@ -48,11 +48,11 @@ type Delegate struct {
 	meta []byte
 }
 
-func (d *Delegate) NodeMeta(limit int) []byte  { return d.meta }
-func (d *Delegate) NotifyMsg([]byte)           {}
+func (d *Delegate) NodeMeta(limit int) []byte                  { return d.meta }
+func (d *Delegate) NotifyMsg([]byte)                           {}
 func (d *Delegate) GetBroadcasts(overhead, limit int) [][]byte { return nil }
-func (d *Delegate) LocalState(join bool) []byte { return nil }
-func (d *Delegate) MergeRemoteState(buf []byte, join bool) {}
+func (d *Delegate) LocalState(join bool) []byte                { return nil }
+func (d *Delegate) MergeRemoteState(buf []byte, join bool)     {}
 
 // EventDelegate implements memberlist.EventDelegate to receive join/leave events.
 type EventDelegate struct {
@@ -121,11 +121,11 @@ type Cluster struct {
 
 // Config holds cluster configuration.
 type Config struct {
-	NodeID      string
-	BindAddr    string
-	BindPort    int
-	SeedPeers   []string
-	Logger      *log.Logger
+	NodeID    string
+	BindAddr  string
+	BindPort  int
+	SeedPeers []string
+	Logger    *log.Logger
 }
 
 // New creates and joins a cluster.

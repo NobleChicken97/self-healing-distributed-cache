@@ -602,4 +602,3 @@ func TestQuorumWriteAndRead(t *testing.T) {
 	}
 	t.Logf("quorum read response: %s", string(body))
 }
-
