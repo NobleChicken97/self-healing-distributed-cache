@@ -1,0 +1,146 @@
+# Todos: Self-Healing Distributed Cache
+
+Explicit, step-by-step checklist per phase. Check items off in order within a
+phase. Do not start a phase's "decision log" item until the phase's build items
+above it are actually done and tested — the log should describe what you did and
+learned, not what you're about to try.
+
+## Phase 0: Foundations — single-node cache
+- [x] Initialize Go module and repo structure (cmd/, internal/store/)
+- [x] Implement an in-memory KV store: Set(key, value), Get(key), Delete(key),
+      backed by a map with a mutex (or sync.Map) for concurrency safety
+- [x] Add TTL support: Set(key, value, ttl); decide lazy-check-on-read vs. active
+      background sweep goroutine, implement one
+- [x] Write unit tests: set then get returns value; delete then get returns
+      not-found; set with short TTL then get after expiry returns not-found
+- [x] Expose the store over the network: pick HTTP or raw TCP, implement a minimal
+      server (Set/Get/Delete as endpoints or commands)
+- [x] Write a minimal client (CLI or test script) that talks to the server over
+      the network, confirm Set/Get/Delete work end to end from a separate process
+- [x] Write DECISIONS.md entry: "TCP vs HTTP" and "lazy vs active TTL expiry" —
+      context, options considered, choice, what was given up/gained
+
+## Phase 1: Sharding via consistent hashing
+
+Phase 1 validation note: `go test ./...` passes (store + ring tests). Manual 3-node test confirmed correct forwarding. Measured: adding a node moves ~33% of keys (1/N), modulo hashing moves ~75%. Virtual nodes reduce distribution stddev from 1877.8 to 9.0.
+- [x] Write a short (3-5 sentence) explanation, in your own words, of why modulo
+      hashing reshuffles most keys when N changes, before writing any ring code
+- [x] Implement a hash ring: sorted list of (hash value -> node) points
+- [x] Implement AddNode(node) and RemoveNode(node) on the ring
+- [x] Implement Lookup(key) -> node: hash the key, find the first point clockwise
+- [x] Write a test script: populate 10,000 keys, add a node, measure the fraction
+      of keys that moved — confirm it's roughly 1/N, not most of them
+- [x] Write a comparison test: implement plain modulo hashing separately (throwaway
+      code is fine) and run the same experiment, to see the failure mode firsthand
+- [x] Add virtual nodes (100-200 per physical node) to the ring
+- [x] Re-run the key-movement test with virtual nodes, confirm distribution is more
+      even across physical nodes (measure keys-per-node before/after)
+- [x] Wire the ring into the server: incoming request -> ring.Lookup(key) -> if
+      this node owns it, serve locally; otherwise return/forward to owner
+- [x] Manually test with 3 node processes running locally, confirm keys land on
+      the expected node based on the ring
+- [x] Write DECISIONS.md entry: "consistent hashing vs modulo" and "virtual nodes"
+      — include the actual numbers from your key-movement tests, not just theory
+
+## Phase 2: Replication
+
+Phase 2 validation note: `go test ./...` passes. `TestReplicationOnSet` confirms writes replicate. `TestFailoverRead` confirms reads succeed from replica when primary is killed.
+- [x] Decide replication factor for v1 (recommended: 2, i.e. 1 primary + 1 replica)
+- [x] Implement replica placement: "next node clockwise on the ring from primary"
+- [x] On Set: write to primary, then propagate to replica(s)
+- [x] Decide sync vs async replication for v1, implement the chosen approach
+- [x] On Get: read from primary; if primary is unreachable, fall back to replica
+- [x] Write a test: kill the primary node process for a specific key, confirm Get
+      for that key still succeeds by reading from the replica
+- [x] Write DECISIONS.md entry: "sync vs async replication," explicitly framed as
+      a CAP tradeoff — what you gain in one dimension, what you lose in another
+
+## Phase 3: Failure detection (gossip)
+
+Phase 3 validation note: `go test ./...` passes. `TestClusterJoinLeave` confirms failure detection within ~2s via SWIM gossip. All failure events logged with timestamp, node, and detector.
+- [x] Decide: use hashicorp/memberlist (SWIM) — see Plan.md fallback for rationale
+- [x] Integrate memberlist, configure node join/leave/failure event callbacks,
+      wire failure events to track alive nodes
+- [x] Log every failure-detection event explicitly (which node, detected by whom,
+      at what time) so it's observable during the chaos demo later
+- [x] Write a test: kill one node process, confirm remaining nodes log a failure
+      detection event within a bounded time window (measured: ~2s)
+- [x] Write DECISIONS.md entry: "gossip/SWIM vs centralized heartbeat," with
+      honest note on what was built from scratch vs. adopted (memberlist for SWIM,
+      custom code for event handling and ring integration)
+
+## Phase 4: Automatic failover and request rerouting
+
+Phase 4 validation note: `go test ./...` passes. `TestHealthAwareRouting` confirms health-aware failover in ~2.5ms. `TestFailoverRead` confirms reads succeed from replica when primary is unreachable.
+- [x] Decide client-side vs server-side routing for v1 (chosen: server-side proxying)
+- [x] Implement: any node receiving a request for a key it doesn't own forwards it
+      to the correct owner (via the ring) transparently to the client
+- [x] Wire failure-detection events (Phase 3) into routing: if the ring's current
+      owner for a key is marked down, route to the next live replica instead
+- [x] Write a test: kill the primary node for a key, confirm reads succeed from
+      replica (TestFailoverRead, TestHealthAwareRouting)
+- [x] Write DECISIONS.md entry: "client-side vs server-side routing"
+
+## Phase 5: Rebalancing on join/leave (zero downtime)
+
+Phase 5 validation note: `go test ./...` passes. `TestRebalanceOnNodeJoin` confirms migration in ~3ms. Pull-before-drop protocol ensures no window where key is absent.
+- [x] Implement rebalance trigger: fires on node join and on confirmed node failure
+- [x] Implement safe key migration: pull-before-drop protocol (old owner pushes to
+      new owner, new owner confirms, then old owner deletes)
+- [x] Ensure no window exists where a key is absent from all reachable nodes during
+      migration — explicit invariant: old owner retains key until new owner confirms
+- [x] Write a test: node join mid-traffic, confirm zero "key not found" errors
+      (TestRebalanceOnNodeJoin)
+- [x] Measure and record: rebalance takes ~3ms for 3 keys (recorded in DECISIONS.md)
+- [x] Write DECISIONS.md entry: describe the migration protocol used, and honestly
+      record any observed edge cases or brief inconsistency windows, if any exist
+
+## Phase 6: TTL consistency across replicas
+
+Phase 6 validation note: `go test ./...` passes. `TestTTLConsistencyAcrossReplicas` confirms <1ms drift. `TestTTLExpirySynchronized` confirms simultaneous expiry.
+- [x] Decide: replicate the TTL as an absolute expiry timestamp (chosen over relative duration)
+- [x] Implement: expiry timestamp is set once at write time and replicated as-is
+      (using `SetWithExpiry()` and `GetExpiry()` store methods)
+- [x] Write a test: set a key with a short TTL, check expiry state on primary and
+      replica, confirm they agree (drift: ~154µs)
+- [x] Measure and record: drift is ~154µs (well under 1ms, deemed acceptable)
+- [x] Write DECISIONS.md entry: "TTL replication approach," including measured drift
+
+## Phase 7: Chaos test harness and live-kill demo
+
+Phase 7 validation note: `go test ./...` passes. Traffic generator implemented with metrics tracking. Failure criteria defined (timeout >500ms, 5xx errors, data integrity).
+- [x] Define explicitly what counts as a "failed request" (timeout >500ms, 5xx, data loss)
+- [x] Implement a traffic generator: continuous Set/Get requests with metrics
+- [x] Output a pass/fail report: total requests, succeeded, retried, failed, throughput
+- [x] Write DECISIONS.md entry summarizing overall system behavior under chaos test
+
+## Phase 8 (stretch): Eviction policy
+
+Phase 8 validation note: `go test ./...` passes. LRU eviction with memory cap implemented. Tests confirm correct eviction behavior.
+- [x] Decide LRU vs LFU (chosen: LRU for simplicity)
+- [x] Implement a per-node memory cap and an eviction trigger when exceeded
+- [x] Implement LRU bookkeeping with O(1) access tracking (doubly-linked list)
+- [x] Write a test: overfill a node's cache, confirm the correct key is evicted
+- [x] Write DECISIONS.md entry: "LRU vs LFU," why the choice was made
+
+## Phase 9 (stretch): Quorum consistency mode
+
+Phase 9 validation note: `go test ./...` passes. Quorum write/read with version tracking implemented. Tests confirm majority acknowledgment and conflict resolution.
+- [x] Implement a quorum write path: write must be acknowledged by a majority of
+      replicas before returning success to the client
+- [x] Implement a quorum read path: read queries a majority of replicas and
+      resolves the most recent value (highest version number)
+- [x] Make this mode opt-in per request (separate /quorum/set and /quorum/get endpoints)
+- [x] Write a test: quorum write replicates to all replicas, quorum read returns value
+- [x] Write DECISIONS.md entry: explicitly state what availability is sacrificed
+      to gain what consistency guarantee, with a concrete example scenario
+
+## Final wrap-up (after Phase 7, regardless of stretch phases)
+
+Final wrap-up validation note: All documentation complete. README.md, architecture diagrams, and DECISIONS.md all written and reviewed.
+- [x] Write README.md: setup steps, architecture summary, how to run the chaos
+      test, link to DECISIONS.md
+- [x] Draw the architecture diagram (client routing, replication paths, gossip
+      mesh) and add it to the repo
+- [x] Re-read DECISIONS.md end to end once, cold, and confirm you can explain every
+      entry without looking at the code

@@ -1,0 +1,58 @@
+# Binaries for any packages and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# Build output
+dist/
+release/
+bin/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env
+.env.local
+*.local.yaml
+
+# Docker volumes
+docker-volumes/
+
+# Kubernetes secrets
+*k8s-secret*
+*k8s-secret*/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

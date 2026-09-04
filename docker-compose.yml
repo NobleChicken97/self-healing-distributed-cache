@@ -1,0 +1,116 @@
+version: '3.8'
+
+# Self-Healing Distributed Cache - Local Development Cluster
+# Usage:
+#   docker-compose up -d          # Start 3-node cluster
+#   docker-compose logs -f node-a # View logs
+#   docker-compose down           # Stop cluster
+#   docker-compose up -d --scale node-b=2 node-c=2  # Scale nodes
+
+services:
+  node-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cache-node-a
+    command: ["-addr", ":8080", "-id", "node-a", "-cluster-port", "7946"]
+    ports:
+      - "8080:8080"  # HTTP API
+      - "7946:7946"  # Gossip protocol
+    environment:
+      - CACHE_ID=node-a
+      - CACHE_CLUSTER_PORT=7946
+    networks:
+      - cache-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/ring/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  node-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cache-node-b
+    command: ["-addr", ":8080", "-id", "node-b", "-peers", "node-a:8080", "-cluster-port", "7946"]
+    ports:
+      - "8081:8080"  # HTTP API
+    depends_on:
+      node-a:
+        condition: service_healthy
+    networks:
+      - cache-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/ring/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  node-c:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cache-node-c
+    command: ["-addr", ":8080", "-id", "node-c", "-peers", "node-a:8080", "-cluster-port", "7946"]
+    ports:
+      - "8082:8080"  # HTTP API
+    depends_on:
+      node-a:
+        condition: service_healthy
+    networks:
+      - cache-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/ring/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cache-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - cache-net
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cache-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - cache-net
+    profiles:
+      - monitoring
+
+networks:
+  cache-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  grafana-storage:

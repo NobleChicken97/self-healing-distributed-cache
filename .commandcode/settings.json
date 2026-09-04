@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(go:*)",
+      "Shell(timeout /t 2 /nobreak >nul && curl -s http://localhost:8080/ring/info)",
+      "Shell(Start-Sleep:*)",
+      "Shell(Invoke-RestMethod:*)",
+      "Shell(ping -n 3 127.0.0.1 >nul & curl -s http://localhost:8080/ring/info)",
+      "Shell(curl -s -X POST http://localhost:8080/set -H \"Content-Type: application/json\" -d \"{\\\"key\\\":\\\"testkey\\\",\\\"value\\\":\\\"hello\\\",\\\"ttl_ms\\\":0}\")",
+      "Shell(curl -s http://localhost:8080/get?key=testkey)",
+      "Shell(curl -s -X POST http://localhost:8080/set -H Content-Type: application/json -d {\"key\":\"forward-test\",\"value\":\"routed\",\"ttl_ms\":0})",
+      "Shell(curl -s http://localhost:8081/get?key=forward-test)",
+      "Shell(curl -s -X DELETE http://localhost:8082/delete?key=forward-test)",
+      "Shell(curl -s http://localhost:8080/get?key=forward-test)",
+      "Shell(git:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}
