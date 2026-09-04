@@ -98,27 +98,22 @@ func (s *Store) Set(key, value string, ttl time.Duration) {
 		}
 	}
 
+	s.currentMem += entrySize
+
+	// Add to front of LRU list (most recently used) if enabled.
+	var lruElement *list.Element
+	if s.lruList != nil {
+		lruElement = s.lruList.PushFront(key)
+	}
+
+	// Single write with all fields
 	s.entries[key] = entry{
 		value:      value,
 		expiresAt:  expiresAt,
 		version:    newVersion,
 		updatedAt:  time.Now(),
 		size:       entrySize,
-		lruElement: nil,
-	}
-	s.currentMem += entrySize
-
-	// Add to front of LRU list (most recently used).
-	if s.lruList != nil {
-		elem := s.lruList.PushFront(key)
-		s.entries[key] = entry{
-			value:      value,
-			expiresAt:  expiresAt,
-			version:    newVersion,
-			updatedAt:  time.Now(),
-			size:       entrySize,
-			lruElement: elem,
-		}
+		lruElement: lruElement,
 	}
 
 	// Evict if over memory cap.
@@ -143,26 +138,20 @@ func (s *Store) SetWithExpiry(key, value string, expiresAt time.Time) {
 		}
 	}
 
+	s.currentMem += entrySize
+
+	var lruElement *list.Element
+	if s.lruList != nil {
+		lruElement = s.lruList.PushFront(key)
+	}
+
 	s.entries[key] = entry{
 		value:      value,
 		expiresAt:  expiresAt,
 		version:    newVersion,
 		updatedAt:  time.Now(),
 		size:       entrySize,
-		lruElement: nil,
-	}
-	s.currentMem += entrySize
-
-	if s.lruList != nil {
-		elem := s.lruList.PushFront(key)
-		s.entries[key] = entry{
-			value:      value,
-			expiresAt:  expiresAt,
-			version:    newVersion,
-			updatedAt:  time.Now(),
-			size:       entrySize,
-			lruElement: elem,
-		}
+		lruElement: lruElement,
 	}
 
 	s.evictIfNeeded()
@@ -179,24 +168,26 @@ func (s *Store) GetExpiry(key string) time.Time {
 // GetWithVersion returns the value, version, and expiry for a key.
 // Used by quorum reads to resolve the most recent value across replicas.
 func (s *Store) GetWithVersion(key string) (value string, version int64, expiresAt time.Time, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	item, ok := s.entries[key]
 	if !ok {
 		return "", 0, time.Time{}, ErrNotFound
 	}
 	if !item.expiresAt.IsZero() && !time.Now().Before(item.expiresAt) {
-		s.deleteLocked(key)
+		// Note: cannot delete here with RLock, return not found
 		return "", 0, time.Time{}, ErrNotFound
 	}
 
-	// Update LRU: move to front (most recently used).
-	if item.lruElement != nil {
+	return item.value, item.version, item.expiresAt, nil
+}
+
+// touchLRU moves a key to the front of the LRU list (must be called with write lock held).
+func (s *Store) touchLRU(key string) {
+	if item, ok := s.entries[key]; ok && item.lruElement != nil {
 		s.lruList.MoveToFront(item.lruElement)
 	}
-
-	return item.value, item.version, item.expiresAt, nil
 }
 
 // SetVersion sets a key with a specific version (used by quorum replication).
@@ -219,26 +210,20 @@ func (s *Store) SetVersion(key, value string, expiresAt time.Time, version int64
 		}
 	}
 
+	s.currentMem += entrySize
+
+	var lruElement *list.Element
+	if s.lruList != nil {
+		lruElement = s.lruList.PushFront(key)
+	}
+
 	s.entries[key] = entry{
 		value:      value,
 		expiresAt:  expiresAt,
 		version:    version,
 		updatedAt:  time.Now(),
 		size:       entrySize,
-		lruElement: nil,
-	}
-	s.currentMem += entrySize
-
-	if s.lruList != nil {
-		elem := s.lruList.PushFront(key)
-		s.entries[key] = entry{
-			value:      value,
-			expiresAt:  expiresAt,
-			version:    version,
-			updatedAt:  time.Now(),
-			size:       entrySize,
-			lruElement: elem,
-		}
+		lruElement: lruElement,
 	}
 
 	s.evictIfNeeded()
@@ -246,24 +231,42 @@ func (s *Store) SetVersion(key, value string, expiresAt time.Time, version int64
 }
 
 func (s *Store) Get(key string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	// Fast path: read lock for the common case
+	s.mu.RLock()
 	item, ok := s.entries[key]
 	if !ok {
+		s.mu.RUnlock()
 		return "", ErrNotFound
 	}
+
+	// Check expiry without modifying
 	if !item.expiresAt.IsZero() && !time.Now().Before(item.expiresAt) {
-		s.deleteLocked(key)
+		s.mu.RUnlock()
+		// Slow path: take write lock to delete expired entry
+		s.mu.Lock()
+		// Re-check under write lock
+		if item, ok := s.entries[key]; ok && !item.expiresAt.IsZero() && !time.Now().Before(item.expiresAt) {
+			s.deleteLocked(key)
+		}
+		s.mu.Unlock()
 		return "", ErrNotFound
 	}
 
-	// Update LRU: move to front (most recently used).
-	if item.lruElement != nil {
-		s.lruList.MoveToFront(item.lruElement)
+	value := item.value
+	lruElement := item.lruElement
+	s.mu.RUnlock()
+
+	// Update LRU outside of lock if needed
+	if lruElement != nil {
+		s.mu.Lock()
+		// Re-check element is still valid
+		if item, ok := s.entries[key]; ok && item.lruElement == lruElement {
+			s.lruList.MoveToFront(lruElement)
+		}
+		s.mu.Unlock()
 	}
 
-	return item.value, nil
+	return value, nil
 }
 
 func (s *Store) Delete(key string) {

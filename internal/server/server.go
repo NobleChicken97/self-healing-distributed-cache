@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"selfhealingcache/internal/cluster"
@@ -27,6 +28,7 @@ type Server struct {
 	cluster           *cluster.Cluster
 	logger            *log.Logger
 	rebalancer        *rebalance.Rebalancer
+	rebalancerMu      sync.Mutex // protects rebalancer field
 }
 
 // New creates a server with ring-based routing and replication.
@@ -72,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/rebalance", s.handleRebalance)
 	mux.HandleFunc("/rebalance/accept", s.handleRebalanceAccept)
 	mux.HandleFunc("/rebalance/pull", s.handleRebalancePull)
+	mux.HandleFunc("/rebalance/complete", s.handleRebalanceComplete)
 	mux.HandleFunc("/rebalance/status", s.handleRebalanceStatus)
 	// Quorum consistency endpoints (opt-in stronger consistency)
 	mux.HandleFunc("/quorum/set", s.handleQuorumSet)
@@ -81,19 +84,32 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// getOrCreateRebalancer returns the existing rebalancer or creates one thread-safely.
+func (s *Server) getOrCreateRebalancer() *rebalance.Rebalancer {
+	s.rebalancerMu.Lock()
+	defer s.rebalancerMu.Unlock()
+	if s.rebalancer == nil {
+		s.rebalancer = rebalance.New(s.ring, s.logger)
+	}
+	return s.rebalancer
+}
+
 // TriggerRebalance initiates a rebalance operation asynchronously.
 // It computes which keys need to move and migrates them safely.
 // This should be called when the ring topology changes (node join/leave).
 func (s *Server) TriggerRebalance() {
-	if s.rebalancer == nil {
-		s.rebalancer = rebalance.New(s.ring, s.logger)
-	}
+	rb := s.getOrCreateRebalancer()
 
 	// Get local keys that need to be checked for migration.
 	localKeys := s.store.Keys()
 
 	go func() {
-		result := s.rebalancer.Rebalance(s.nodeID, s.listenAddr, localKeys)
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Printf("[REBALANCE] panic: %v", r)
+			}
+		}()
+		result := rb.Rebalance(s.nodeID, s.listenAddr, localKeys)
 		s.logger.Printf("[REBALANCE] completed: total=%d moved=%d failed=%d duration=%v",
 			result.TotalKeys, result.MovedKeys, result.FailedKeys, result.Duration)
 	}()
@@ -106,16 +122,19 @@ func (s *Server) handleRebalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.rebalancer == nil {
-		s.rebalancer = rebalance.New(s.ring, s.logger)
-	}
+	rb := s.getOrCreateRebalancer()
 
 	// Get local keys from the store.
 	localKeys := s.store.Keys()
 
 	// Run rebalance in background.
 	go func() {
-		result := s.rebalancer.Rebalance(s.nodeID, s.listenAddr, localKeys)
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Printf("[REBALANCE] panic: %v", r)
+			}
+		}()
+		result := rb.Rebalance(s.nodeID, s.listenAddr, localKeys)
 		s.logger.Printf("[REBALANCE] completed: total=%d moved=%d failed=%d duration=%v",
 			result.TotalKeys, result.MovedKeys, result.FailedKeys, result.Duration)
 	}()
@@ -202,20 +221,46 @@ func (s *Server) handleRebalancePull(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleRebalanceComplete handles a completion signal from the rebalancer.
+// This is called after a key has been successfully migrated to the new owner.
+// The old owner can now safely delete the key.
+func (s *Server) handleRebalanceComplete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method must be POST")
+		return
+	}
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "key query parameter is required")
+		return
+	}
+
+	s.store.Delete(key)
+	s.logger.Printf("[REBALANCE] deleted migrated key=%s", key)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "deleted",
+		"key":    key,
+	})
+}
+
 // handleRebalanceStatus returns the status of the last rebalance operation.
 func (s *Server) handleRebalanceStatus(w http.ResponseWriter, r *http.Request) {
-	if s.rebalancer == nil {
+	s.rebalancerMu.Lock()
+	rb := s.rebalancer
+	s.rebalancerMu.Unlock()
+
+	if rb == nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "no rebalance performed yet",
 		})
 		return
 	}
 
-	result := s.rebalancer.LastResult()
+	result := rb.LastResult()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"in_progress": s.rebalancer.IsInProgress(),
+		"in_progress": rb.IsInProgress(),
 		"last_result": result,
-		"migrations":  s.rebalancer.Migrations(),
+		"migrations":  rb.Migrations(),
 	})
 }
 
@@ -774,13 +819,12 @@ func (s *Server) handleQuorumSet(w http.ResponseWriter, r *http.Request) {
 	s.store.SetVersion(req.Key, req.Value, expiresAt, version)
 
 	// Replicate to replicas and wait for quorum.
+	// Quorum = majority of all nodes (primary + replicas)
 	replicas := s.ring.Replicas(req.Key, s.replicationFactor)
-	quorumNeeded := (len(replicas) + 1) / 2 // Majority including primary
-	if quorumNeeded < 1 {
-		quorumNeeded = 1
-	}
+	totalNodes := len(replicas) + 1 // +1 for primary
+	quorumNeeded := (totalNodes / 2) + 1 // Majority
 
-	ackCount := 1 // Primary has acknowledged
+	replicaAcks := 0
 	var lastErr error
 
 	for _, replica := range replicas {
@@ -792,27 +836,30 @@ func (s *Server) handleQuorumSet(w http.ResponseWriter, r *http.Request) {
 			lastErr = err
 			continue
 		}
-		ackCount++
-		if ackCount >= quorumNeeded {
-			break
-		}
+		replicaAcks++
 	}
 
-	if ackCount < quorumNeeded {
-		s.logger.Printf("[QUORUM] write failed: got %d acks, needed %d: %v", ackCount, quorumNeeded, lastErr)
+	// Total acks = replica acks + 1 (primary)
+	totalAcks := replicaAcks + 1
+
+	if totalAcks < quorumNeeded {
+		s.logger.Printf("[QUORUM] write failed: got %d acks (%d replicas + primary), needed %d: %v",
+			totalAcks, replicaAcks, quorumNeeded, lastErr)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"status": "quorum_failed",
-			"acks":   ackCount,
-			"needed": quorumNeeded,
-			"error":  lastErr,
+			"status":      "quorum_failed",
+			"acks":        totalAcks,
+			"replica_acks": replicaAcks,
+			"needed":      quorumNeeded,
+			"error":       lastErr,
 		})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":  "ok",
-		"acks":    ackCount,
-		"version": version,
+		"status":       "ok",
+		"acks":         totalAcks,
+		"replica_acks": replicaAcks,
+		"version":      version,
 	})
 }
 

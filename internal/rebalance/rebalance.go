@@ -251,7 +251,35 @@ func (rb *Rebalancer) ExecuteMigration(m *Migration, oldOwnerAddr string) error 
 		return fmt.Errorf("new owner returned status=%d body=%s", resp.StatusCode, string(body))
 	}
 
+	// Step 3: Signal completion to delete key from old owner.
+	// This ensures the key exists on both nodes during migration (no window where it's absent).
+	if err := rb.signalMigrationComplete(m, oldOwnerAddr); err != nil {
+		// Log but don't fail - the key will be cleaned up on next rebalance or TTL expiry
+		rb.logger.Printf("[REBALANCE] failed to signal completion for key=%s: %v", m.Key, err)
+	}
+
 	m.Status = MigrationComplete
+	return nil
+}
+
+// signalMigrationComplete tells the old owner to delete the migrated key.
+func (rb *Rebalancer) signalMigrationComplete(m *Migration, oldOwnerAddr string) error {
+	completeURL := fmt.Sprintf("http://%s/rebalance/complete?key=%s", oldOwnerAddr, url.QueryEscape(m.Key))
+	req, err := http.NewRequest(http.MethodPost, completeURL, nil)
+	if err != nil {
+		return fmt.Errorf("create complete request: %w", err)
+	}
+
+	resp, err := rb.transport.RoundTrip(req)
+	if err != nil {
+		return fmt.Errorf("signal complete: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("old owner returned status=%d body=%s", resp.StatusCode, string(body))
+	}
 	return nil
 }
 
