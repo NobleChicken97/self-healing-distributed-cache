@@ -9,3 +9,4 @@
 - Prefers automated CI/CD pipelines with GitHub Actions for build, test, and deploy workflows. Confidence: 0.85
 - Prefers containerized deployment workflow: build Docker image → push to registry (ECR) → pull on servers → redeploy. Confidence: 0.85
 - Prefers push-to-deploy model where pushing to main automatically triggers deployment to production. Confidence: 0.8
+- Before starting new work, prefers a clear "done vs remaining" breakdown with explicit task ownership (who does what). Confidence: 0.65
