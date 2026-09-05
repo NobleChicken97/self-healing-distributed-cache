@@ -70,6 +70,15 @@ resource "aws_lightsail_instance_public_ports" "cache_ports" {
     cidrs     = ["0.0.0.0/0"]
   }
 
+  # SWIM gossip probes run over UDP on the same port — without this, nodes
+  # stay mutually suspect and the cluster never converges (alive_nodes stuck at 1).
+  port_info {
+    protocol  = "udp"
+    from_port = 7946
+    to_port   = 7946
+    cidrs     = ["0.0.0.0/0"]
+  }
+
   port_info {
     protocol  = "tcp"
     from_port = 22

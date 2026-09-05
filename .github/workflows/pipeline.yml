@@ -320,6 +320,7 @@ jobs:
               --restart always \
               -p 8080:8080 \
               -p 7946:7946 \
+              -p 7946:7946/udp \
               ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
               -cluster-port 7946 \
@@ -355,6 +356,7 @@ jobs:
               --restart always \
               -p 8080:8080 \
               -p 7946:7946 \
+              -p 7946:7946/udp \
               ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
               -cluster-port 7946 \
@@ -390,6 +392,7 @@ jobs:
               --restart always \
               -p 8080:8080 \
               -p 7946:7946 \
+              -p 7946:7946/udp \
               ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
               -cluster-port 7946 \

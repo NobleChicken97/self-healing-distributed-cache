@@ -34,14 +34,10 @@ func main() {
 		*advertiseAddr = *addr
 	}
 
-	// Parse host from addr for cluster binding.
-	host, _, err := net.SplitHostPort(*addr)
-	if err != nil {
-		log.Fatalf("invalid addr %q: %v", *addr, err)
-	}
-	if host == "" {
-		host = "127.0.0.1"
-	}
+	// Parse host from addr for cluster binding. An empty host (":8080") must
+	// bind all interfaces: binding localhost would make gossip unreachable
+	// from other hosts (connection refused through Docker port mapping).
+	host := gossipBindAddr(*addr)
 
 	// Derive cluster bind port from HTTP port if not specified.
 	clusterBindPort := *clusterPort
@@ -111,6 +107,18 @@ func main() {
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+// gossipBindAddr extracts the host for the SWIM/gossip listener from the
+// HTTP listen address. Empty host (":8080") or unparseable addr binds all
+// interfaces so peers on other hosts can reach it; otherwise the addr's host
+// is used (e.g. "127.0.0.1:8081" stays local for multi-process dev clusters).
+func gossipBindAddr(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return "0.0.0.0"
+	}
+	return host
 }
 
 // peersToGossipPeers derives memberlist seed addresses from the HTTP peer

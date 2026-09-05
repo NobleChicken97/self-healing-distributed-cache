@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestGossipBindAddr(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want string
+	}{
+		{"empty host binds all interfaces", ":8080", "0.0.0.0"},
+		{"explicit localhost stays local", "127.0.0.1:8081", "127.0.0.1"},
+		{"explicit host kept", "10.0.0.5:8080", "10.0.0.5"},
+		{"garbage binds all interfaces", "not-an-addr", "0.0.0.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gossipBindAddr(tt.addr); got != tt.want {
+				t.Errorf("gossipBindAddr(%q) = %q, want %q", tt.addr, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPeersToGossipPeers(t *testing.T) {
 	tests := []struct {
 		name       string
