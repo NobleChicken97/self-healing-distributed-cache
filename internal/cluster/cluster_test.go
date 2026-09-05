@@ -114,3 +114,44 @@ func TestClusterSingleNode(t *testing.T) {
 		t.Fatal("solo node should be alive")
 	}
 }
+
+// TestClusterAdvertiseAddrConverges models the container topology: gossip
+// binds all interfaces while advertising an explicit reachable address.
+// (Binding 0.0.0.0 without an advertise address leaves peers with an
+// unreachable 0.0.0.0 record, so probes never match and nodes stay solo.)
+func TestClusterAdvertiseAddrConverges(t *testing.T) {
+	c1, err := New(Config{
+		NodeID:        "adv-1",
+		BindAddr:      "0.0.0.0",
+		BindPort:      17946,
+		AdvertiseAddr: "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("failed to create adv-1: %v", err)
+	}
+	defer c1.Shutdown()
+
+	c2, err := New(Config{
+		NodeID:        "adv-2",
+		BindAddr:      "0.0.0.0",
+		BindPort:      17947,
+		AdvertiseAddr: "127.0.0.1",
+		SeedPeers:     []string{"127.0.0.1:17946"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create adv-2: %v", err)
+	}
+	defer c2.Shutdown()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if c1.AliveCount() >= 2 && c2.AliveCount() >= 2 {
+			t.Logf("advertised cluster converged: adv-1=%d alive, adv-2=%d alive",
+				c1.AliveCount(), c2.AliveCount())
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("advertised nodes did not converge (adv-1=%d, adv-2=%d)",
+		c1.AliveCount(), c2.AliveCount())
+}

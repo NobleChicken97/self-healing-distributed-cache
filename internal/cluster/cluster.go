@@ -121,11 +121,17 @@ type Cluster struct {
 
 // Config holds cluster configuration.
 type Config struct {
-	NodeID    string
-	BindAddr  string
-	BindPort  int
-	SeedPeers []string
-	Logger    *log.Logger
+	NodeID   string
+	BindAddr string
+	BindPort int
+	// AdvertiseAddr is the host peers should dial to reach this node. It
+	// must be reachable from other hosts (e.g. a public IP behind Docker
+	// port mapping). Empty means memberlist's default (the bind address),
+	// which is wrong whenever BindAddr is 0.0.0.0 or localhost-only while
+	// peers are remote.
+	AdvertiseAddr string
+	SeedPeers     []string
+	Logger        *log.Logger
 	// OnTopologyChange is called when a node joins or leaves the cluster.
 	// Use this to trigger rebalancing or other topology-dependent operations.
 	OnTopologyChange func(nodeID string, alive bool)
@@ -146,6 +152,9 @@ func New(cfg Config) (*Cluster, error) {
 	conf.BindAddr = cfg.BindAddr
 	conf.BindPort = cfg.BindPort
 	conf.AdvertisePort = cfg.BindPort
+	if cfg.AdvertiseAddr != "" {
+		conf.AdvertiseAddr = cfg.AdvertiseAddr
+	}
 	conf.Events = eventDelegate
 	conf.Delegate = &Delegate{}
 	conf.LogOutput = &logWriter{logger: cfg.Logger, prefix: "[MEMBERLIST] "}

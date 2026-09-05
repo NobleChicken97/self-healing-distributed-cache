@@ -24,6 +24,7 @@ func main() {
 	advertiseAddr := flag.String("advertise-addr", "", "address advertised in ring (defaults to addr)")
 	nodeID := flag.String("id", "", "unique node ID (defaults to addr)")
 	peers := flag.String("peers", "", "comma-separated HTTP peer addresses for ring/proxying (e.g. 10.0.0.2:8080); gossip seeds are derived as host:<cluster-port>")
+	gossipAdv := flag.String("gossip-advertise-addr", "", "host IP peers dial for gossip (e.g. the node's public IP behind Docker port mapping); empty = bind address (local dev only)")
 	clusterPort := flag.Int("cluster-port", 0, "port for cluster gossip (0 = auto)")
 	flag.Parse()
 
@@ -67,10 +68,11 @@ func main() {
 	// Start cluster membership (SWIM/gossip) for failure detection.
 	// Wire topology changes to trigger automatic rebalancing.
 	c, err := cluster.New(cluster.Config{
-		NodeID:    *nodeID,
-		BindAddr:  host,
-		BindPort:  clusterBindPort,
-		SeedPeers: peersToGossipPeers(*peers, clusterBindPort),
+		NodeID:        *nodeID,
+		BindAddr:      host,
+		BindPort:      clusterBindPort,
+		AdvertiseAddr: *gossipAdv,
+		SeedPeers:     peersToGossipPeers(*peers, clusterBindPort),
 		OnTopologyChange: func(nodeID string, alive bool) {
 			if !alive {
 				log.Printf("[CLUSTER] node %s left/failed, triggering rebalance", nodeID)
