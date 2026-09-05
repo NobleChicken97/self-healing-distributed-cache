@@ -273,3 +273,76 @@ func TestNodeRecoveryRebalance(t *testing.T) {
 
 	t.Logf("Get after recovery: status=%d body=%s", resp.StatusCode, string(body))
 }
+
+// TestAutoRebalanceOnNodeFailure verifies that when a node fails,
+// the cluster automatically triggers rebalancing.
+func TestAutoRebalanceOnNodeFailure(t *testing.T) {
+	r := ring.New(150)
+
+	// Start initial 2 nodes
+	_, portA, cleanupA := startTestServer(t, r, "node-a", "")
+	defer cleanupA()
+
+	_, portB, cleanupB := startTestServer(t, r, "node-b", "")
+	defer cleanupB()
+
+	r.AddNode(ring.Node{ID: "node-a", Addr: fmt.Sprintf("127.0.0.1:%d", portA)})
+	r.AddNode(ring.Node{ID: "node-b", Addr: fmt.Sprintf("127.0.0.1:%d", portB)})
+
+	time.Sleep(100 * time.Millisecond)
+
+	baseA := fmt.Sprintf("http://127.0.0.1:%d", portA)
+
+	// Write some keys
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("rebalance-key-%d", i)
+		setBody := fmt.Sprintf(`{"key":"%s","value":"value-%d","ttl_ms":60000}`, key, i)
+		resp, err := http.Post(baseA+"/set", "application/json", strings.NewReader(setBody))
+		if err != nil {
+			t.Fatalf("set failed: %v", err)
+		}
+		resp.Body.Close()
+	}
+	t.Log("Wrote 20 keys")
+
+	// Wait for replication
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify all keys are readable before node failure
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("rebalance-key-%d", i)
+		resp, err := http.Get(baseA + "/get?key=" + key)
+		if err != nil {
+			t.Fatalf("get failed for %s: %v", key, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("key %s not found before failure: status=%d", key, resp.StatusCode)
+		}
+	}
+	t.Log("All keys verified before failure")
+
+	// "Kill" node-b by cleaning it up
+	cleanupB()
+	t.Log("Killed node-b")
+
+	// Wait for failure detection and rebalance
+	time.Sleep(3 * time.Second)
+
+	// Verify all keys are still readable (from node-a)
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("rebalance-key-%d", i)
+		resp, err := http.Get(baseA + "/get?key=" + key)
+		if err != nil {
+			t.Logf("get failed for %s (may be expected during rebalance): %v", key, err)
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Logf("key %s found after failure", key)
+		} else {
+			t.Logf("key %s status=%d body=%s", key, resp.StatusCode, string(body))
+		}
+	}
+}

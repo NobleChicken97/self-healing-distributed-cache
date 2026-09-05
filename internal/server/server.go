@@ -29,18 +29,115 @@ type Server struct {
 	logger            *log.Logger
 	rebalancer        *rebalance.Rebalancer
 	rebalancerMu      sync.Mutex // protects rebalancer field
+
+	// replication tracking for graceful shutdown
+	replWg          sync.WaitGroup
+	replStop        chan struct{}
+	replMu          sync.Mutex
+	pendingRepls    map[string]time.Time // key -> first failed time
+	maxRetries      int
+	retryInterval   time.Duration
+	retryDone       chan struct{}
+}
+
+// pendingReplication tracks a failed replication for retry.
+type pendingReplication struct {
+	key       string
+	value     string
+	expiresAt time.Time
+	version   int64
+	failCount int
+	firstFail time.Time
 }
 
 // New creates a server with ring-based routing and replication.
 func New(s *store.Store, nodeID string, r *ring.Ring) *Server {
-	return &Server{
+	srv := &Server{
 		store:             s,
 		nodeID:            nodeID,
 		ring:              r,
 		transport:         http.DefaultTransport,
 		replicationFactor: 2,
 		logger:            log.Default(),
+		maxRetries:        3,
+		retryInterval:     5 * time.Second,
+		pendingRepls:      make(map[string]time.Time),
+		replStop:          make(chan struct{}),
+		retryDone:         make(chan struct{}),
 	}
+
+	// Start the replication retry goroutine.
+	srv.replWg.Add(1)
+	go srv.retryLoop()
+
+	return srv
+}
+
+// retryLoop periodically retries failed replications.
+func (s *Server) retryLoop() {
+	defer s.replWg.Done()
+	ticker := time.NewTicker(s.retryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.replStop:
+			close(s.retryDone)
+			return
+		case <-ticker.C:
+			s.retryFailedReplications()
+		}
+	}
+}
+
+// retryFailedReplications attempts to retry failed replications.
+func (s *Server) retryFailedReplications() {
+	s.replMu.Lock()
+	keys := make([]string, 0, len(s.pendingRepls))
+	for key := range s.pendingRepls {
+		keys = append(keys, key)
+	}
+	s.replMu.Unlock()
+
+	for _, key := range keys {
+		s.replMu.Lock()
+		firstFail, ok := s.pendingRepls[key]
+		s.replMu.Unlock()
+		if !ok {
+			continue
+		}
+
+		// Only retry if enough time has passed.
+		if time.Since(firstFail) < s.retryInterval {
+			continue
+		}
+
+		// Get the current value from local store.
+		value, _, expiresAt, err := s.store.GetWithVersion(key)
+		if err != nil {
+			// Key no longer exists, remove from pending.
+			s.replMu.Lock()
+			delete(s.pendingRepls, key)
+			s.replMu.Unlock()
+			continue
+		}
+
+		// Attempt replication.
+		s.logger.Printf("[REPLICATION] retrying key=%s (first failed: %v)", key, firstFail)
+		if s.replicateSet(key, value, expiresAt) {
+			s.replMu.Lock()
+			delete(s.pendingRepls, key)
+			s.replMu.Unlock()
+			s.logger.Printf("[REPLICATION] retry succeeded for key=%s", key)
+		}
+	}
+}
+
+// ShutdownReplication waits for in-flight replications to complete and stops the retry loop.
+func (s *Server) ShutdownReplication() {
+	close(s.replStop)
+	<-s.retryDone
+	s.replWg.Wait()
 }
 
 // WithCluster sets the cluster for failure detection and returns the server
@@ -81,6 +178,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/quorum/get", s.handleQuorumGet)
 	mux.HandleFunc("/replica/get", s.handleReplicaGet)
 	mux.HandleFunc("/replica/quorum/set", s.handleReplicaQuorumSet)
+	// Health and metrics endpoints
+	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/metrics", s.handleMetrics)
 	return mux
 }
 
@@ -490,15 +590,27 @@ func (s *Server) handleSet(w http.ResponseWriter, r *http.Request) {
 	if ttl > 0 {
 		expiresAt = time.Now().Add(ttl)
 	}
-	go s.replicateSet(req.Key, req.Value, expiresAt)
+
+	// Track replication goroutine for graceful shutdown.
+	s.replWg.Add(1)
+	go func() {
+		defer s.replWg.Done()
+		s.replicateSet(req.Key, req.Value, expiresAt)
+	}()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // replicateSet propagates a write to all replica nodes asynchronously.
 // It sends the absolute expiry timestamp so all replicas expire simultaneously.
-func (s *Server) replicateSet(key, value string, expiresAt time.Time) {
+// Returns true if all replicas were successfully written, false otherwise.
+func (s *Server) replicateSet(key, value string, expiresAt time.Time) bool {
 	replicas := s.ring.Replicas(key, s.replicationFactor)
+	if len(replicas) == 0 {
+		return true // No replicas to write to
+	}
+
+	allSuccess := true
 	for _, replica := range replicas {
 		if replica.ID == s.nodeID {
 			continue
@@ -512,15 +624,29 @@ func (s *Server) replicateSet(key, value string, expiresAt time.Time) {
 		url := fmt.Sprintf("http://%s/replica/set?key=%s", replica.Addr, url.QueryEscape(key))
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
+			allSuccess = false
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := s.transport.RoundTrip(req)
 		if err != nil {
+			allSuccess = false
 			continue
 		}
 		resp.Body.Close()
 	}
+
+	// Track failed replication for retry.
+	if !allSuccess {
+		s.replMu.Lock()
+		if _, exists := s.pendingRepls[key]; !exists {
+			s.pendingRepls[key] = time.Now()
+			s.logger.Printf("[REPLICATION] tracking failed replication for key=%s", key)
+		}
+		s.replMu.Unlock()
+	}
+
+	return allSuccess
 }
 
 // replicateRequest is the payload sent to replicas during replication.
@@ -679,7 +805,13 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.store.Delete(key)
-	go s.replicateDelete(key)
+
+	// Track replication goroutine for graceful shutdown.
+	s.replWg.Add(1)
+	go func() {
+		defer s.replWg.Done()
+		s.replicateDelete(key)
+	}()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -1016,4 +1148,50 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// handleHealth returns the health status of this node.
+// Used by load balancers and orchestrators for health checks.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method must be GET")
+		return
+	}
+	status := "healthy"
+	aliveNodes := 0
+	if s.cluster != nil {
+		aliveNodes = s.cluster.AliveCount()
+		if aliveNodes == 0 {
+			status = "degraded"
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":      status,
+		"node_id":     s.nodeID,
+		"alive_nodes": aliveNodes,
+	})
+}
+
+// handleMetrics returns operational metrics for this node.
+// Provides basic observability for monitoring.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method must be GET")
+		return
+	}
+	metrics := map[string]any{
+		"node_id":       s.nodeID,
+		"entry_count":   s.store.EntryCount(),
+		"memory_usage":  s.store.MemoryUsage(),
+		"memory_cap":    s.store.MemoryCap(),
+		"has_eviction":  s.store.HasEviction(),
+		"pending_repls": len(s.pendingRepls),
+	}
+	if s.cluster != nil {
+		metrics["alive_nodes"] = s.cluster.AliveCount()
+		metrics["cluster_enabled"] = true
+	} else {
+		metrics["cluster_enabled"] = false
+	}
+	writeJSON(w, http.StatusOK, metrics)
 }

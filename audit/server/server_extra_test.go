@@ -189,3 +189,65 @@ func TestClusterInfoEndpoint(t *testing.T) {
 		t.Fatalf("expected cluster_enabled=false, got %v", result["cluster_enabled"])
 	}
 }
+
+// TestHealthEndpoint verifies health check endpoint
+func TestHealthEndpoint(t *testing.T) {
+	r := ring.New(150)
+	r.AddNode(ring.Node{ID: "node-a", Addr: "127.0.0.1:8080"})
+
+	s := server.New(store.New(time.Second), "node-a", r)
+
+	req, _ := http.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&result)
+	if result["status"] != "healthy" {
+		t.Fatalf("expected status=healthy, got %v", result["status"])
+	}
+	if result["node_id"] != "node-a" {
+		t.Fatalf("expected node_id=node-a, got %v", result["node_id"])
+	}
+}
+
+// TestMetricsEndpoint verifies metrics endpoint
+func TestMetricsEndpoint(t *testing.T) {
+	r := ring.New(150)
+	r.AddNode(ring.Node{ID: "node-a", Addr: "127.0.0.1:8080"})
+
+	s := server.New(store.New(time.Second), "node-a", r)
+
+	// Add some data via HTTP
+	body := strings.NewReader(`{"key":"test-key","value":"test-value","ttl_ms":0}`)
+	req, _ := http.NewRequest(http.MethodPost, "/set", body)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("set failed: %d %s", w.Code, w.Body.String())
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, "/metrics", nil)
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&result)
+	if result["node_id"] != "node-a" {
+		t.Fatalf("expected node_id=node-a, got %v", result["node_id"])
+	}
+	if result["entry_count"].(float64) != 1 {
+		t.Fatalf("expected entry_count=1, got %v", result["entry_count"])
+	}
+	if result["cluster_enabled"] != false {
+		t.Fatalf("expected cluster_enabled=false, got %v", result["cluster_enabled"])
+	}
+}

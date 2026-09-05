@@ -256,10 +256,12 @@ func (s *Store) Get(key string) (string, error) {
 	lruElement := item.lruElement
 	s.mu.RUnlock()
 
-	// Update LRU outside of lock if needed
+	// Update LRU outside of read lock to avoid holding lock during LRU operations.
+	// This is a best-effort update: if the entry was evicted or replaced, the
+	// pointer comparison will fail and we simply skip the update.
 	if lruElement != nil {
 		s.mu.Lock()
-		// Re-check element is still valid
+		// Re-check element is still valid (entry exists and same LRU element)
 		if item, ok := s.entries[key]; ok && item.lruElement == lruElement {
 			s.lruList.MoveToFront(lruElement)
 		}

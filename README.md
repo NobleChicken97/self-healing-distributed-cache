@@ -72,6 +72,25 @@ failures automatically via gossip, and rebalances data with zero downtime.
    - New owner stores locally via `/rebalance/accept`
    - Old owner retains key until new owner confirms
 
+### Automatic Rebalance Trigger
+
+When a node failure is detected via SWIM gossip, the cluster automatically triggers rebalancing:
+
+1. SWIM detects node failure (~2 seconds)
+2. Cluster health updates mark node as dead
+3. `OnTopologyChange` callback fires
+4. All surviving nodes trigger rebalance
+5. Keys from failed node are redistributed
+
+### Replication Retry
+
+Failed replications are automatically retried:
+
+1. If replica is unreachable, the failure is tracked
+2. A background goroutine retries every 5 seconds
+3. Up to 3 retry attempts per failed key
+4. Successful retry removes key from pending queue
+
 ## Quick Start
 
 ### Prerequisites
@@ -122,8 +141,14 @@ go run ./cmd/cache-client -url http://localhost:8080 -command delete -key mykey
 | DELETE | `/delete?key=<key>` | Delete a key |
 | GET | `/ring/info` | View ring membership |
 | GET | `/cluster/info` | View cluster health |
+| GET | `/health` | Health check for load balancers |
+| GET | `/metrics` | Operational metrics |
 | POST | `/rebalance` | Trigger rebalance |
 | GET | `/rebalance/status` | View rebalance status |
+| POST | `/quorum/set` | Quorum write (stronger consistency) |
+| GET | `/quorum/get?key=<key>` | Quorum read (stronger consistency) |
+
+See [docs/API.md](./docs/API.md) for complete API documentation.
 
 ## Configuration
 
@@ -145,7 +170,53 @@ go test ./... -v
 
 # Run specific package tests
 go test ./internal/... -v
+
+# Run with race detector (requires GCC toolchain)
+go test -race ./...
 ```
+
+## Test Results
+
+All tests pass (verified on Windows with Go 1.25):
+
+```
+ok  selfhealingcache/audit           6.171s
+ok  selfhealingcache/audit/rebalance 2.155s
+ok  selfhealingcache/audit/server    1.949s
+ok  selfhealingcache/internal/chaos  2.057s
+ok  selfhealingcache/internal/cluster 5.267s
+ok  selfhealingcache/internal/rebalance 1.862s
+ok  selfhealingcache/internal/ring   1.203s
+ok  selfhealingcache/internal/server 3.790s
+ok  selfhealingcache/internal/store  0.787s
+```
+
+**Test coverage includes:**
+- Unit tests: store operations, ring hashing, consistent hashing distribution
+- Integration tests: replication, failover, rebalance, TTL consistency
+- Chaos tests: traffic generation, failure scenarios
+- Quorum tests: write/read with majority acknowledgment
+
+**Note:** Race detector (`-race`) requires a 64-bit GCC toolchain which may not be available on all Windows setups.
+
+## Demo
+
+Run the automated demo to see self-healing in action:
+
+```bash
+# Linux/macOS
+./demo.sh
+
+# Windows
+demo.bat
+```
+
+The demo will:
+1. Start a 3-node cluster
+2. Populate with test data
+3. Simulate a node failure
+4. Verify data remains accessible
+5. Recover the failed node
 
 ## Decision Log
 
@@ -194,8 +265,7 @@ design decision including:
 - No persistence (in-memory only)
 - No authentication or encryption
 - Single data center (no multi-region)
-- Best-effort replication (small window for data loss on primary failure)
-- No automatic rebalance trigger (manual or on node join)
+- Best-effort replication with retry (small window for data loss on primary failure)
 
 ## CI/CD
 

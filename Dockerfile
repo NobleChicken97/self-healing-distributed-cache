@@ -54,12 +54,13 @@ COPY --from=builder /build/cache-client /cache-client
 # Use non-root user
 USER appuser
 
-# Expose HTTP port
-EXPOSE 8080
+# Expose ports
+EXPOSE 8080  # HTTP API
+EXPOSE 7946  # Gossip protocol
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["/cache-server", "-addr", ":8080"] || exit 1
+# Health check using the /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Default command
 ENTRYPOINT ["/cache-server"]

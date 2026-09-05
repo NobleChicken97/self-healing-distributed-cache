@@ -102,7 +102,8 @@
       "Shell(curl http://15.252.208.189:8080/get?key=replication-test)",
       "Shell(ssh -i \"C:\\Users\\arpan.ARPAN\\.ssh\\cache-cluster-key\" -o StrictHostKeyChecking=no admin@13.126.24.246 \"curl 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscliv2.zip' && unzip -q awscliv2.zip && sudo ./aws/install && rm -rf aws awscliv2.zip && aws configure set region ap-south-1 && aws --version\")",
       "Shell(ssh -i \"C:\\Users\\arpan.ARPAN\\.ssh\\cache-cluster-key\" -o StrictHostKeyChecking=no admin@13.127.78.189 \"curl 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscliv2.zip' && unzip -q awscliv2.zip && sudo ./aws/install && rm -rf aws awscliv2.zip && aws configure set region ap-south-1 && aws --version\")",
-      "Shell(ssh -i \"C:\\Users\\arpan.ARPAN\\.ssh\\cache-cluster-key\" -o StrictHostKeyChecking=no admin@15.252.208.189 \"curl 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscliv2.zip' && unzip -q awscliv2.zip && sudo ./aws/install && rm -rf aws awscliv2.zip && aws configure set region ap-south-1 && aws --version\")"
+      "Shell(ssh -i \"C:\\Users\\arpan.ARPAN\\.ssh\\cache-cluster-key\" -o StrictHostKeyChecking=no admin@15.252.208.189 \"curl 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscliv2.zip' && unzip -q awscliv2.zip && sudo ./aws/install && rm -rf aws awscliv2.zip && aws configure set region ap-south-1 && aws --version\")",
+      "Shell(gh:*)"
     ],
     "deny": [],
     "defaultMode": "default"

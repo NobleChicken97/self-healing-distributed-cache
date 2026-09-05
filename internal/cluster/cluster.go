@@ -126,6 +126,9 @@ type Config struct {
 	BindPort  int
 	SeedPeers []string
 	Logger    *log.Logger
+	// OnTopologyChange is called when a node joins or leaves the cluster.
+	// Use this to trigger rebalancing or other topology-dependent operations.
+	OnTopologyChange func(nodeID string, alive bool)
 }
 
 // New creates and joins a cluster.
@@ -163,10 +166,13 @@ func New(cfg Config) (*Cluster, error) {
 	// Initialize alive nodes with self.
 	c.aliveNodes[cfg.NodeID] = true
 
-	// Wire events to update alive tracking.
+	// Wire events to update alive tracking and notify topology changes.
 	eventDelegate.onChange = func(nodeID string, alive bool) {
 		c.SetNodeAlive(nodeID, alive)
 		c.logger.Printf("[CLUSTER] alive_update node=%s alive=%v", nodeID, alive)
+		if cfg.OnTopologyChange != nil {
+			cfg.OnTopologyChange(nodeID, alive)
+		}
 	}
 
 	if len(cfg.SeedPeers) > 0 {

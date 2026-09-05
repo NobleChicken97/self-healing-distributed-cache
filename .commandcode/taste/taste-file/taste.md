@@ -1,6 +1,6 @@
 # Taste File
 - Do not make changes unless 95%+ confident in correctness; ask first if below that threshold. Confidence: 0.95
-- Prefer clear, step-by-step todo lists when tackling multi-step tasks. Confidence: 0.9
+- Prefer clear, step-by-step todo lists when tackling multi-step tasks. Confidence: 0.95
 - Keep docs folder files (todos.md, plan.md, etc.) updated incrementally as work progresses — edit only the changed sections, not full-file rewrites, to keep them current without ballooning context. Confidence: 0.95
 - Pick the best-fit skill(s) and MCP tool(s) for each task rather than defaulting to a single approach. Confidence: 0.85
 - Prefers structured architectural decision records (DECISIONS.md) that document: context, options considered, the choice made, explicit tradeoff analysis (what was given up vs. gained), and test verification. Confidence: 0.85
@@ -10,3 +10,12 @@
 - Prefers containerized deployment workflow: build Docker image → push to registry (ECR) → pull on servers → redeploy. Confidence: 0.85
 - Prefers push-to-deploy model where pushing to main automatically triggers deployment to production. Confidence: 0.8
 - Before starting new work, prefers a clear "done vs remaining" breakdown with explicit task ownership (who does what). Confidence: 0.65
+- Prefers the agent to autonomously execute infrastructure/deployment commands (SSH, git, CLI operations) once given the go-ahead, rather than asking for confirmation on each individual command. Confidence: 0.75
+- Wants thorough, senior-level code review that critiques every aspect of the project — architecture, code quality, testing, security, performance, error handling — not just surface-level review. Confidence: 0.9
+- Follows project management docs (todos, PRD, progress) as the source of truth for development priorities and next steps — reads them first and uses them to guide what to work on. Confidence: 0.85
+- Expects autonomous continuation — when the user says "continue" or "continue development", the agent should read the current project state and proceed without re-establishing context, re-explaining prior work, or asking clarifying questions. Confidence: 0.8
+- Uses session handoff files (e.g., session.txt) to transfer context between sessions — shares previous conversation dumps so the agent can pick up where the last session left off. Confidence: 0.7
+- Prefers thorough stress and chaos testing that actively tries to break the system — concurrent access, network partitions, node failures, data integrity under load — not just happy-path coverage. Confidence: 0.8
+- Prefers project-specific CI/CD pipelines tailored to the actual deployment topology and failure modes of the project, not generic templates. Confidence: 0.7
+- Prefers a single consolidated GitHub Actions workflow file over multiple separate workflow files — "make it all into a single github action", doesn't want to see multiple workflows per deploy. Confidence: 0.9
+- Prefers finishing existing development work and hardening what already exists before adding new features or advancing to the next phase. Confidence: 0.65

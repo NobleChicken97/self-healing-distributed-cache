@@ -65,12 +65,22 @@ func main() {
 		}
 	}
 
+	// Create the server first so we can wire cluster events to rebalancing.
+	srv := server.New(cache, *nodeID, r).WithListenAddr(*advertiseAddr)
+
 	// Start cluster membership (SWIM/gossip) for failure detection.
+	// Wire topology changes to trigger automatic rebalancing.
 	c, err := cluster.New(cluster.Config{
 		NodeID:    *nodeID,
 		BindAddr:  host,
 		BindPort:  clusterBindPort,
 		SeedPeers: peersToHostPort(*peers),
+		OnTopologyChange: func(nodeID string, alive bool) {
+			if !alive {
+				log.Printf("[CLUSTER] node %s left/failed, triggering rebalance", nodeID)
+				srv.TriggerRebalance()
+			}
+		},
 	})
 	if err != nil {
 		log.Fatalf("cluster init failed: %v", err)
@@ -79,7 +89,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:              *addr,
-		Handler:           server.New(cache, *nodeID, r).WithCluster(c).Handler(),
+		Handler:           srv.WithCluster(c).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -92,6 +102,8 @@ func main() {
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("HTTP shutdown failed: %v", err)
 		}
+		// Wait for in-flight replications to complete.
+		srv.ShutdownReplication()
 	}()
 
 	log.Printf("cache node %s listening on %s (cluster port %d, peers: %s)",

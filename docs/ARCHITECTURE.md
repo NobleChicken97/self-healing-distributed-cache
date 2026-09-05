@@ -187,8 +187,69 @@ New Node D Joins
 │  3. Gossip "B suspected" to other nodes                    │
 │  4. If B doesn't respond → B is marked FAILED              │
 │  5. All nodes update their health state                     │
+│  6. OnTopologyChange callback fires → triggers rebalance   │
 │                                                             │
 │  Detection time: ~2 seconds                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Automatic Rebalance Trigger Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Automatic Rebalance Flow                     │
+│                                                             │
+│  1. SWIM detects node failure (~2 seconds)                  │
+│     │                                                       │
+│     ▼                                                       │
+│  2. EventDelegate.NotifyLeave() fires                       │
+│     │                                                       │
+│     ▼                                                       │
+│  3. onChange callback updates aliveNodes                    │
+│     │                                                       │
+│     ▼                                                       │
+│  4. OnTopologyChange callback fires                        │
+│     │                                                       │
+│     ▼                                                       │
+│  5. server.TriggerRebalance() called                        │
+│     │                                                       │
+│     ▼                                                       │
+│  6. Rebalance runs in background goroutine                  │
+│     - Computes which keys need to move                      │
+│     - Pulls keys to new owners                              │
+│     - Old owners delete after confirmation                  │
+│                                                             │
+│  Result: Zero-downtime key redistribution                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Replication Retry Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Replication Retry Flow                      │
+│                                                             │
+│  1. Client SET → Primary writes locally                     │
+│     │                                                       │
+│     ▼                                                       │
+│  2. Async replication to replicas                           │
+│     │                                                       │
+│     ├── Success → Done                                      │
+│     │                                                       │
+│     └── Failure → Track in pendingRepls map                 │
+│              │                                              │
+│              ▼                                              │
+│  3. Background retryLoop (every 5 seconds)                  │
+│     │                                                       │
+│     ▼                                                       │
+│  4. Retry failed replications                               │
+│     │                                                       │
+│     ├── Success → Remove from pendingRepls                  │
+│     │                                                       │
+│     └── Failure → Keep in pendingRepls (max 3 retries)      │
+│                                                             │
+│  Graceful Shutdown: replWg.Wait() ensures all in-flight    │
+│  replications complete before process exits                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
