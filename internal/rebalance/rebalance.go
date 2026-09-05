@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -95,9 +96,20 @@ func New(r *ring.Ring, logger *log.Logger) *Rebalancer {
 		logger = log.Default()
 	}
 	return &Rebalancer{
-		ring:      r,
-		transport: http.DefaultTransport,
-		logger:    logger,
+		ring:   r,
+		logger: logger,
+		transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			// Migrations run serially: a hung peer must time out rather
+			// than stall the whole rebalance behind it.
+			ResponseHeaderTimeout: 15 * time.Second,
+			MaxIdleConns:          20,
+			MaxIdleConnsPerHost:   2,
+			IdleConnTimeout:       30 * time.Second,
+		},
 	}
 }
 

@@ -207,7 +207,7 @@ func (tg *TrafficGenerator) doSet() {
 			atomic.AddInt64(&tg.metrics.Retried, 1)
 		}
 
-		resp, err := tg.client.Post(url, "application/json", stringReader(body))
+		resp, err := tg.client.Post(url, "application/json", strings.NewReader(body))
 		if err != nil {
 			lastErr = err.Error()
 			continue
@@ -293,24 +293,6 @@ func (tg *TrafficGenerator) recordFailedRequest(op, key, err string, d time.Dura
 		Error:     err,
 		Duration:  d,
 	})
-}
-
-func stringReader(s string) *stringReaderType {
-	return &stringReaderType{s: s}
-}
-
-type stringReaderType struct {
-	s string
-	i int
-}
-
-func (r *stringReaderType) Read(p []byte) (n int, err error) {
-	if r.i >= len(r.s) {
-		return 0, io.EOF
-	}
-	n = copy(p, r.s[r.i:])
-	r.i += n
-	return
 }
 
 // Report generates a human-readable summary of the test results.

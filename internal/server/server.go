@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -34,7 +35,7 @@ type Server struct {
 	replWg        sync.WaitGroup
 	replStop      chan struct{}
 	replMu        sync.Mutex
-	pendingRepls  map[string]time.Time // key -> first failed time
+	pendingRepls  map[string]map[string]time.Time // key -> (replicaID -> first failed time)
 	maxRetries    int
 	retryInterval time.Duration
 	retryDone     chan struct{}
@@ -56,12 +57,12 @@ func New(s *store.Store, nodeID string, r *ring.Ring) *Server {
 		store:             s,
 		nodeID:            nodeID,
 		ring:              r,
-		transport:         http.DefaultTransport,
+		transport:         newOutboundTransport(3*time.Second, 5*time.Second),
 		replicationFactor: 2,
 		logger:            log.Default(),
 		maxRetries:        3,
 		retryInterval:     5 * time.Second,
-		pendingRepls:      make(map[string]time.Time),
+		pendingRepls:      make(map[string]map[string]time.Time),
 		replStop:          make(chan struct{}),
 		retryDone:         make(chan struct{}),
 	}
@@ -71,6 +72,23 @@ func New(s *store.Store, nodeID string, r *ring.Ring) *Server {
 	go srv.retryLoop()
 
 	return srv
+}
+
+// newOutboundTransport builds the HTTP transport for all node-to-node calls
+// (forwarding, replication, rebalance pulls, replica reads). DefaultTransport
+// has no timeouts, so one hung peer could pile up goroutines indefinitely;
+// dial + response-header deadlines bound every outbound call.
+func newOutboundTransport(dialTimeout, headerTimeout time.Duration) *http.Transport {
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   dialTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ResponseHeaderTimeout: headerTimeout,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       30 * time.Second,
+	}
 }
 
 // retryLoop periodically retries failed replications.
@@ -90,47 +108,86 @@ func (s *Server) retryLoop() {
 	}
 }
 
-// retryFailedReplications attempts to retry failed replications.
+// retryFailedReplications attempts to retry failed replications per-replica.
 func (s *Server) retryFailedReplications() {
 	s.replMu.Lock()
-	keys := make([]string, 0, len(s.pendingRepls))
-	for key := range s.pendingRepls {
-		keys = append(keys, key)
+	// Collect all (key, replicaID) pairs that need retry
+	type retryTarget struct {
+		key       string
+		replicaID string
+		firstFail time.Time
+	}
+	var targets []retryTarget
+	for key, replicas := range s.pendingRepls {
+		for replicaID, firstFail := range replicas {
+			if time.Since(firstFail) >= s.retryInterval {
+				targets = append(targets, retryTarget{key, replicaID, firstFail})
+			}
+		}
 	}
 	s.replMu.Unlock()
 
-	for _, key := range keys {
-		s.replMu.Lock()
-		firstFail, ok := s.pendingRepls[key]
-		s.replMu.Unlock()
-		if !ok {
-			continue
-		}
-
-		// Only retry if enough time has passed.
-		if time.Since(firstFail) < s.retryInterval {
-			continue
-		}
-
+	for _, target := range targets {
 		// Get the current value from local store.
-		value, _, expiresAt, err := s.store.GetWithVersion(key)
+		value, _, expiresAt, err := s.store.GetWithVersion(target.key)
 		if err != nil {
 			// Key no longer exists, remove from pending.
 			s.replMu.Lock()
-			delete(s.pendingRepls, key)
+			if replicas, ok := s.pendingRepls[target.key]; ok {
+				delete(replicas, target.replicaID)
+				if len(replicas) == 0 {
+					delete(s.pendingRepls, target.key)
+				}
+			}
 			s.replMu.Unlock()
 			continue
 		}
 
-		// Attempt replication.
-		s.logger.Printf("[REPLICATION] retrying key=%s (first failed: %v)", key, firstFail)
-		if s.replicateSet(key, value, expiresAt) {
+		// Attempt replication to the specific failed replica.
+		s.logger.Printf("[REPLICATION] retrying key=%s to replica=%s (first failed: %v)",
+			target.key, target.replicaID, target.firstFail)
+		if s.replicateToReplica(target.key, value, expiresAt, target.replicaID) {
 			s.replMu.Lock()
-			delete(s.pendingRepls, key)
+			if replicas, ok := s.pendingRepls[target.key]; ok {
+				delete(replicas, target.replicaID)
+				if len(replicas) == 0 {
+					delete(s.pendingRepls, target.key)
+				}
+			}
 			s.replMu.Unlock()
-			s.logger.Printf("[REPLICATION] retry succeeded for key=%s", key)
+			s.logger.Printf("[REPLICATION] retry succeeded for key=%s to replica=%s",
+				target.key, target.replicaID)
 		}
 	}
+}
+
+// replicateToReplica sends a write to a specific replica node.
+// Returns true if the replication succeeded.
+func (s *Server) replicateToReplica(key, value string, expiresAt time.Time, replicaID string) bool {
+	replicas := s.ring.Replicas(key, s.replicationFactor)
+	for _, replica := range replicas {
+		if replica.ID != replicaID {
+			continue
+		}
+		body, _ := json.Marshal(replicateRequest{
+			Key:       key,
+			Value:     value,
+			ExpiresAt: expiresAt.UnixMilli(),
+		})
+		url := fmt.Sprintf("http://%s/replica/set?key=%s", replica.Addr, url.QueryEscape(key))
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := s.transport.RoundTrip(req)
+		if err != nil {
+			return false
+		}
+		resp.Body.Close()
+		return true
+	}
+	return false
 }
 
 // ShutdownReplication waits for in-flight replications to complete and stops the retry loop.
@@ -509,8 +566,8 @@ func (s *Server) forwardToReplica(w http.ResponseWriter, r *http.Request, key st
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
@@ -630,28 +687,33 @@ func (s *Server) replicateSet(key, value string, expiresAt time.Time) bool {
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			allSuccess = false
+			s.trackFailedReplication(key, replica.ID)
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := s.transport.RoundTrip(req)
 		if err != nil {
 			allSuccess = false
+			s.trackFailedReplication(key, replica.ID)
 			continue
 		}
 		resp.Body.Close()
 	}
 
-	// Track failed replication for retry.
-	if !allSuccess {
-		s.replMu.Lock()
-		if _, exists := s.pendingRepls[key]; !exists {
-			s.pendingRepls[key] = time.Now()
-			s.logger.Printf("[REPLICATION] tracking failed replication for key=%s", key)
-		}
-		s.replMu.Unlock()
-	}
-
 	return allSuccess
+}
+
+// trackFailedReplication records a failed replication for per-replica retry.
+func (s *Server) trackFailedReplication(key, replicaID string) {
+	s.replMu.Lock()
+	defer s.replMu.Unlock()
+	if s.pendingRepls[key] == nil {
+		s.pendingRepls[key] = make(map[string]time.Time)
+	}
+	if _, exists := s.pendingRepls[key][replicaID]; !exists {
+		s.pendingRepls[key][replicaID] = time.Now()
+		s.logger.Printf("[REPLICATION] tracking failed replication for key=%s to replica=%s", key, replicaID)
+	}
 }
 
 // replicateRequest is the payload sent to replicas during replication.
@@ -702,6 +764,14 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	value, err := s.store.Get(key)
 	if errors.Is(err, store.ErrNotFound) {
+		// The primary may have restarted with an empty store while replicas
+		// still hold the key (rolling deploys wipe in-memory state). Consult
+		// replicas before reporting 404 — a miss here costs one extra probe
+		// per genuinely-absent key, which is the documented tradeoff.
+		if v, ok := s.readFromReplica(key); ok {
+			writeJSON(w, http.StatusOK, map[string]string{"key": key, "value": v})
+			return
+		}
 		writeError(w, http.StatusNotFound, "key not found")
 		return
 	}
@@ -710,6 +780,42 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"key": key, "value": value})
+}
+
+// readFromReplica fetches the key's copy from a replica when this node owns
+// the key but no longer has it locally (e.g. after a restart wiped its
+// in-memory store while replicas retained the data). It uses /replica/get so
+// the replica serves its local copy directly instead of forwarding back here.
+func (s *Server) readFromReplica(key string) (string, bool) {
+	replicas := s.ring.Replicas(key, s.replicationFactor)
+	aliveReplicas, deadReplicas := splitByAlive(s, replicas)
+	for _, replica := range append(aliveReplicas, deadReplicas...) {
+		if replica.ID == s.nodeID {
+			continue
+		}
+		targetURL := fmt.Sprintf("http://%s/replica/get?key=%s", replica.Addr, url.QueryEscape(key))
+		req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := s.transport.RoundTrip(req)
+		if err != nil {
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+		var out struct {
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal(body, &out); err != nil {
+			continue
+		}
+		return out.Value, true
+	}
+	return "", false
 }
 
 // forwardWithFallback tries the primary node first; if unreachable, falls back
@@ -770,8 +876,8 @@ func (s *Server) forwardWithFallback(w http.ResponseWriter, r *http.Request, key
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		w.Write(respBody)
@@ -904,10 +1010,12 @@ func (s *Server) handleRingInfo(w http.ResponseWriter, r *http.Request) {
 
 // quorumSetRequest is the payload for quorum writes.
 type quorumSetRequest struct {
-	Key     string `json:"key"`
-	Value   string `json:"value"`
-	TTLMS   int64  `json:"ttl_ms"`
-	Version int64  `json:"version"` // Optional: for conditional writes
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	TTLMS int64  `json:"ttl_ms"`
+	// Version is accepted but currently informational: the primary always
+	// assigns version = local current + 1 (no compare-and-swap yet).
+	Version int64 `json:"version"`
 }
 
 // quorumGetResponse is the response from a quorum read.
@@ -1057,25 +1165,33 @@ func (s *Server) handleQuorumGet(w http.ResponseWriter, r *http.Request) {
 		responses = append(responses, nodeResponse{value, version, expiresAt, s.nodeID})
 	}
 
-	// Query replicas.
+	// Query replicas via the bounded transport (never the unbounded default
+	// client — a hung replica must not hang the quorum read).
 	replicas := s.ring.Replicas(key, s.replicationFactor)
+	client := &http.Client{Transport: s.transport}
 	for _, replica := range replicas {
 		if replica.ID == s.nodeID {
 			continue
 		}
-		resp, err := http.Get(fmt.Sprintf("http://%s/replica/get?key=%s", replica.Addr, url.QueryEscape(key)))
+		resp, err := client.Get(fmt.Sprintf("http://%s/replica/get?key=%s", replica.Addr, url.QueryEscape(key)))
 		if err != nil {
 			continue
 		}
-		var result quorumGetResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err == nil && result.Value != "" {
+		func() {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return
+			}
+			var result quorumGetResponse
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				return
+			}
 			expiresAt := time.Time{}
 			if result.ExpiresAt > 0 {
 				expiresAt = time.UnixMilli(result.ExpiresAt)
 			}
 			responses = append(responses, nodeResponse{result.Value, result.Version, expiresAt, result.FromNode})
-		}
-		resp.Body.Close()
+		}()
 	}
 
 	if len(responses) == 0 {
@@ -1185,13 +1301,19 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	metrics := map[string]any{
-		"node_id":       s.nodeID,
-		"entry_count":   s.store.EntryCount(),
-		"memory_usage":  s.store.MemoryUsage(),
-		"memory_cap":    s.store.MemoryCap(),
-		"has_eviction":  s.store.HasEviction(),
-		"pending_repls": len(s.pendingRepls),
+		"node_id":      s.nodeID,
+		"entry_count":  s.store.EntryCount(),
+		"memory_usage": s.store.MemoryUsage(),
+		"memory_cap":   s.store.MemoryCap(),
+		"has_eviction": s.store.HasEviction(),
 	}
+	s.replMu.Lock()
+	pendingCount := 0
+	for _, replicas := range s.pendingRepls {
+		pendingCount += len(replicas)
+	}
+	metrics["pending_repls"] = pendingCount
+	s.replMu.Unlock()
 	if s.cluster != nil {
 		metrics["alive_nodes"] = s.cluster.AliveCount()
 		metrics["cluster_enabled"] = true

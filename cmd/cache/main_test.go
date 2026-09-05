@@ -30,21 +30,28 @@ func TestPeersToGossipPeers(t *testing.T) {
 		name       string
 		peers      string
 		gossipPort int
+		useDefault bool
 		want       []string
 	}{
-		{"empty", "", 7946, nil},
-		{"http peers retargeted to gossip port", "10.0.0.2:8080,10.0.0.3:8080", 7946,
+		{"empty", "", 7946, false, nil},
+		{"explicit uniform port", "10.0.0.2:8080,10.0.0.3:8080", 7946, false,
 			[]string{"10.0.0.2:7946", "10.0.0.3:7946"}},
-		{"local shorthand means localhost", ":8081,:8082", 7946,
+		{"local shorthand means localhost", ":8081,:8082", 7946, false,
 			[]string{"127.0.0.1:7946", "127.0.0.1:7946"}},
-		{"custom gossip port", "10.0.0.2:8080", 9080, []string{"10.0.0.2:9080"}},
-		{"blank entries skipped", "10.0.0.2:8080, ,10.0.0.3:8080", 7946,
+		{"custom gossip port", "10.0.0.2:8080", 9080, false, []string{"10.0.0.2:9080"}},
+		{"blank entries skipped", "10.0.0.2:8080, ,10.0.0.3:8080", 7946, false,
 			[]string{"10.0.0.2:7946", "10.0.0.3:7946"}},
+		{"default convention derives peer HTTP+1000", "127.0.0.1:18081,127.0.0.1:18082", 19080, true,
+			[]string{"127.0.0.1:19081", "127.0.0.1:19082"}},
+		{"default convention with shorthand", ":8081", 9080, true,
+			[]string{"127.0.0.1:9081"}},
+		{"default convention bare host falls back", "cache-node", 7946, true,
+			[]string{"cache-node:7946"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := peersToGossipPeers(tt.peers, tt.gossipPort); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("peersToGossipPeers(%q, %d) = %v, want %v", tt.peers, tt.gossipPort, got, tt.want)
+			if got := peersToGossipPeers(tt.peers, tt.gossipPort, tt.useDefault); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("peersToGossipPeers(%q, %d, %v) = %v, want %v", tt.peers, tt.gossipPort, tt.useDefault, got, tt.want)
 			}
 		})
 	}

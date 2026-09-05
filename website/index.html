@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Self-Healing Distributed Cache - A distributed, in-memory key-value cache built from scratch in Go">
+    <meta property="og:title" content="Self-Healing Distributed Cache">
+    <meta property="og:description" content="Shards data across nodes, replicates for fault tolerance, detects failures via gossip, and rebalances with zero downtime.">
+    <meta property="og:type" content="website">
+    <title>Self-Healing Distributed Cache | Built from Scratch in Go</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ==========================================
+         HEADER / NAVIGATION
+    ========================================== -->
+    <header class="header" id="header">
+        <div class="container header-inner">
+            <a href="#hero" class="logo">
+                <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+                    <circle cx="16" cy="16" r="6" stroke="currentColor" stroke-width="2"/>
+                    <circle cx="16" cy="6" r="3" fill="currentColor"/>
+                    <circle cx="24" cy="22" r="3" fill="currentColor"/>
+                    <circle cx="8" cy="22" r="3" fill="currentColor"/>
+                </svg>
+                <span class="logo-text">SHDC</span>
+            </a>
+            <nav class="nav" id="nav">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#architecture" class="nav-link">Architecture</a>
+                <a href="#tech-stack" class="nav-link">Tech Stack</a>
+                <a href="#api" class="nav-link">API</a>
+                <a href="#docs" class="nav-link">Docs</a>
+            </nav>
+            <a href="https://github.com/NobleChicken97/self-healing-distributed-cache" target="_blank" class="btn btn-primary btn-nav">
+                GitHub <span class="btn-arrow">&rarr;</span>
+            </a>
+            <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- ==========================================
+             HERO SECTION
+        ========================================== -->
+        <section class="hero" id="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <h1 class="hero-headline">A self-healing distributed cache built from scratch in Go</h1>
+                    <p class="hero-subtext">Shards data across nodes, replicates for fault tolerance, detects failures via gossip, and rebalances with zero downtime.</p>
+                    <div class="hero-buttons">
+                        <a href="#features" class="btn btn-primary">Explore Features</a>
+                        <a href="https://github.com/NobleChicken97/self-healing-distributed-cache" target="_blank" class="btn btn-outline">View on GitHub</a>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="terminal">
+                        <div class="terminal-header">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                            <span class="terminal-title">cluster status</span>
+                        </div>
+                        <div class="terminal-body">
+                            <pre><span class="t-comment"># Request flow</span>
+Client → Any Node → Hash Ring Lookup
+         ↓
+   ┌─────────────┐
+   │  Node A     │◄─── Primary
+   │  (Primary)  │
+   └──────┬──────┘
+          │ Gossip Mesh
+   ┌──────┴──────┐
+   │  Node B     │◄─── Replica
+   │  (Replica)  │
+   └─────────────┘
+
+<span class="t-comment"># Health check</span>
+$ curl /health
+{"status":"healthy","alive_nodes":3}
+
+<span class="t-comment"># Metrics</span>
+$ curl /metrics
+{"entry_count":42,"pending_repls":0}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <div class="stat-ticker">
+                    <span class="ticker-item"><strong>9</strong> Phases Complete</span>
+                    <span class="ticker-sep">|</span>
+                    <span class="ticker-item"><strong>11</strong> Test Packages</span>
+                    <span class="ticker-sep">|</span>
+                    <span class="ticker-item"><strong>&lt;2s</strong> Failure Detection</span>
+                    <span class="ticker-sep">|</span>
+                    <span class="ticker-item"><strong>&lt;1ms</strong> TTL Drift</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             FEATURES SECTION
+        ========================================== -->
+        <section class="section features" id="features">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-label">WHAT IT DOES</span>
+                    <h2 class="section-title">Features</h2>
+                </div>
+                <div class="features-grid">
+                    <div class="card feature-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <circle cx="12" cy="12" r="4"/>
+                                <line x1="12" y1="2" x2="12" y2="6"/>
+                                <line x1="12" y1="18" x2="12" y2="22"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Consistent Hashing</h3>
+                        <p class="card-text">Keys distributed via hash ring with 150 virtual nodes per physical node. Adding or removing a node moves only ~1/N keys.</p>
+                    </div>
+                    <div class="card feature-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4" y="4" width="16" height="16" rx="2"/>
+                                <path d="M9 9h6v6H9z"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Async Replication</h3>
+                        <p class="card-text">Each key replicated to one additional node. Writes are asynchronous for low latency while maintaining fault tolerance.</p>
+                    </div>
+                    <div class="card feature-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                                <path d="M2 17l10 5 10-5"/>
+                                <path d="M2 12l10 5 10-5"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">SWIM Gossip Detection</h3>
+                        <p class="card-text">Nodes detect peer failures automatically via hashicorp/memberlist SWIM protocol. Detection within ~2 seconds.</p>
+                    </div>
+                    <div class="card feature-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Automatic Failover</h3>
+                        <p class="card-text">Requests for dead node's keys are automatically redirected to replicas. Health-aware routing skips known-dead nodes immediately (~2.5ms).</p>
+                    </div>
+                    <div class="card feature-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="17 1 21 5 17 9"/>
+                                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                <polyline points="7 23 3 19 7 15"/>
+                                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Zero-Downtime Rebalancing</h3>
+                        <p class="card-text">Pull-before-drop protocol ensures no window where a key is absent from all nodes during topology changes.</p>
+                    </div>
+                    <div class="card feature-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">TTL Consistency</h3>
+                        <p class="card-text">Absolute expiry timestamps replicated across all replicas. Less than 1ms drift between nodes for synchronized expiry.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             ARCHITECTURE SECTION
+        ========================================== -->
+        <section class="section architecture" id="architecture">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-label">SYSTEM DESIGN</span>
+                    <h2 class="section-title">Architecture</h2>
+                </div>
+                <div class="arch-diagram">
+                    <div class="arch-client">
+                        <div class="arch-node client-node">
+                            <span class="node-icon">&#128187;</span>
+                            <span class="node-label">Client</span>
+                        </div>
+                        <div class="arch-arrow">&darr;</div>
+                    </div>
+                    <div class="arch-routing">
+                        <div class="arch-node router-node">
+                            <span class="node-icon">&#128260;</span>
+                            <span class="node-label">Hash Ring</span>
+                            <span class="node-sublabel">Lookup</span>
+                        </div>
+                        <div class="arch-arrow">&darr;</div>
+                    </div>
+                    <div class="arch-nodes">
+                        <div class="arch-node primary-node">
+                            <span class="node-icon">&#9679;</span>
+                            <span class="node-label">Node A</span>
+                            <span class="node-sublabel">Primary</span>
+                        </div>
+                        <div class="arch-node replica-node">
+                            <span class="node-icon">&#9679;</span>
+                            <span class="node-label">Node B</span>
+                            <span class="node-sublabel">Replica</span>
+                        </div>
+                        <div class="arch-node replica-node">
+                            <span class="node-icon">&#9679;</span>
+                            <span class="node-label">Node C</span>
+                            <span class="node-sublabel">Replica</span>
+                        </div>
+                    </div>
+                    <div class="arch-gossip">
+                        <span class="gossip-label">SWIM Gossip Mesh</span>
+                    </div>
+                </div>
+                <div class="arch-steps">
+                    <div class="arch-step">
+                        <span class="step-num">1</span>
+                        <span class="step-text">Client sends request to any node</span>
+                    </div>
+                    <div class="arch-step">
+                        <span class="step-num">2</span>
+                        <span class="step-text">Node checks hash ring for key's primary owner</span>
+                    </div>
+                    <div class="arch-step">
+                        <span class="step-num">3</span>
+                        <span class="step-text">If primary: serve locally, replicate async</span>
+                    </div>
+                    <div class="arch-step">
+                        <span class="step-num">4</span>
+                        <span class="step-text">If primary dead: route to replica via health-aware failover</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             STATS SECTION
+        ========================================== -->
+        <section class="section stats-section">
+            <div class="container">
+                <div class="stats-grid">
+                    <div class="stat-item" data-count="9">
+                        <span class="stat-number">0</span>
+                        <span class="stat-label">Phases Complete</span>
+                    </div>
+                    <div class="stat-item" data-count="11">
+                        <span class="stat-number">0</span>
+                        <span class="stat-label">Test Packages</span>
+                    </div>
+                    <div class="stat-item stat-item-small">
+                        <span class="stat-number">&lt;2s</span>
+                        <span class="stat-label">Failure Detection</span>
+                    </div>
+                    <div class="stat-item stat-item-small">
+                        <span class="stat-number">&lt;1ms</span>
+                        <span class="stat-label">TTL Drift</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             TECH STACK SECTION
+        ========================================== -->
+        <section class="section tech-stack" id="tech-stack">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-label">TECHNOLOGIES</span>
+                    <h2 class="section-title">Built With</h2>
+                </div>
+                <div class="tech-grid">
+                    <div class="tech-badge">
+                        <span class="tech-icon">&#9783;</span>
+                        <span class="tech-name">Go</span>
+                        <span class="tech-desc">Systems language</span>
+                    </div>
+                    <div class="tech-badge">
+                        <span class="tech-icon">&#9881;</span>
+                        <span class="tech-name">hashicorp/memberlist</span>
+                        <span class="tech-desc">SWIM gossip protocol</span>
+                    </div>
+                    <div class="tech-badge">
+                        <span class="tech-icon">&#9678;</span>
+                        <span class="tech-name">Consistent Hashing</span>
+                        <span class="tech-desc">SHA-256 ring</span>
+                    </div>
+                    <div class="tech-badge">
+                        <span class="tech-icon">&#127462;</span>
+                        <span class="tech-name">HTTP/JSON API</span>
+                        <span class="tech-desc">REST endpoints</span>
+                    </div>
+                    <div class="tech-badge">
+                        <span class="tech-icon">&#128051;</span>
+                        <span class="tech-name">Docker</span>
+                        <span class="tech-desc">Containerization</span>
+                    </div>
+                    <div class="tech-badge">
+                        <span class="tech-icon">&#9729;</span>
+                        <span class="tech-name">AWS Lightsail</span>
+                        <span class="tech-desc">Cloud deployment</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             PROCESS SECTION
+        ========================================== -->
+        <section class="section process">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-label">METHODOLOGY</span>
+                    <h2 class="section-title">Development Process</h2>
+                </div>
+                <div class="process-timeline">
+                    <div class="process-step">
+                        <span class="process-num">01</span>
+                        <h3 class="process-title">Foundation</h3>
+                        <p class="process-desc">Single-node cache with TTL, HTTP API, CLI client, and decision-log entries.</p>
+                    </div>
+                    <div class="process-step">
+                        <span class="process-num">02</span>
+                        <h3 class="process-title">Distribution</h3>
+                        <p class="process-desc">Consistent hashing ring, virtual nodes, async replication, and gossip-based failure detection.</p>
+                    </div>
+                    <div class="process-step">
+                        <span class="process-num">03</span>
+                        <h3 class="process-title">Resilience</h3>
+                        <p class="process-desc">Automatic failover, rebalancing with pull-before-drop protocol, chaos testing harness.</p>
+                    </div>
+                    <div class="process-step">
+                        <span class="process-num">04</span>
+                        <h3 class="process-title">Production</h3>
+                        <p class="process-desc">CI/CD pipeline with GitHub Actions, Terraform infrastructure, AWS deployment.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             API PREVIEW SECTION
+        ========================================== -->
+        <section class="section api-section" id="api">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-label">INTERACTIVE</span>
+                    <h2 class="section-title">API Reference</h2>
+                </div>
+                <div class="terminal api-terminal">
+                    <div class="terminal-header">
+                        <span class="terminal-dot red"></span>
+                        <span class="terminal-dot yellow"></span>
+                        <span class="terminal-dot green"></span>
+                        <span class="terminal-title">API Examples</span>
+                    </div>
+                    <div class="terminal-body">
+<pre><span class="t-comment"># Set a key with TTL</span>
+$ curl -X POST http://localhost:8080/set \
+  -H "Content-Type: application/json" \
+  -d '{"key":"hello","value":"world","ttl_ms":60000}'
+<span class="t-success">{"status":"ok"}</span>
+
+<span class="t-comment"># Get the key (works from any node)</span>
+$ curl http://localhost:8081/get?key=hello
+<span class="t-success">{"key":"hello","value":"world"}</span>
+
+<span class="t-comment"># Check cluster health</span>
+$ curl http://localhost:8080/health
+<span class="t-success">{"status":"healthy","alive_nodes":3}</span>
+
+<span class="t-comment"># View operational metrics</span>
+$ curl http://localhost:8080/metrics
+<span class="t-success">{"entry_count":42,"memory_usage":1024}</span>
+
+<span class="t-comment"># Trigger manual rebalance</span>
+$ curl -X POST http://localhost:8080/rebalance
+<span class="t-success">{"status":"rebalance started"}</span>
+
+<span class="t-comment"># Quorum write (stronger consistency)</span>
+$ curl -X POST http://localhost:8080/quorum/set \
+  -H "Content-Type: application/json" \
+  -d '{"key":"critical","value":"data"}'
+<span class="t-success">{"status":"ok","acks":2,"version":1}</span></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             DOCS SECTION
+        ========================================== -->
+        <section class="section docs-section" id="docs">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-label">LEARN MORE</span>
+                    <h2 class="section-title">Documentation</h2>
+                </div>
+                <div class="docs-grid">
+                    <a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/ARCHITECTURE.md" target="_blank" class="card doc-card">
+                        <h3>Architecture</h3>
+                        <p>System design, request routing, replication flow, and failure detection diagrams.</p>
+                    </a>
+                    <a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/API.md" target="_blank" class="card doc-card">
+                        <h3>API Reference</h3>
+                        <p>Complete endpoint documentation with request/response examples.</p>
+                    </a>
+                    <a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/DECISIONS.md" target="_blank" class="card doc-card">
+                        <h3>Decision Log</h3>
+                        <p>Tradeoff analysis for every major design choice.</p>
+                    </a>
+                    <a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/DEPLOYMENT.md" target="_blank" class="card doc-card">
+                        <h3>Deployment Guide</h3>
+                        <p>Docker, Kubernetes, and cloud deployment instructions.</p>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             CTA / CONTACT SECTION
+        ========================================== -->
+        <section class="section cta-section">
+            <div class="container">
+                <h2 class="cta-title">Interested in distributed systems?</h2>
+                <p class="cta-subtext">Explore the source code, run the chaos tests, or read the architecture docs.</p>
+                <div class="cta-buttons">
+                    <a href="https://github.com/NobleChicken97/self-healing-distributed-cache" target="_blank" class="btn btn-primary">View on GitHub</a>
+                    <a href="https://github.com/NobleChicken97/self-healing-distributed-cache/tree/main/docs" target="_blank" class="btn btn-outline">Read the Docs</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==========================================
+         FOOTER
+    ========================================== -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-col">
+                    <div class="footer-brand">
+                        <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="16" cy="16" r="6" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="16" cy="6" r="3" fill="currentColor"/>
+                            <circle cx="24" cy="22" r="3" fill="currentColor"/>
+                            <circle cx="8" cy="22" r="3" fill="currentColor"/>
+                        </svg>
+                        <span class="footer-brand-name">Self-Healing Distributed Cache</span>
+                    </div>
+                </div>
+                <div class="footer-col">
+                    <h4 class="footer-heading">Project</h4>
+                    <ul class="footer-links">
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#architecture">Architecture</a></li>
+                        <li><a href="#api">API</a></li>
+                        <li><a href="#docs">Documentation</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4 class="footer-heading">Resources</h4>
+                    <ul class="footer-links">
+                        <li><a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/API.md" target="_blank">API Docs</a></li>
+                        <li><a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/DEPLOYMENT.md" target="_blank">Deployment</a></li>
+                        <li><a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/docs/DECISIONS.md" target="_blank">Decision Log</a></li>
+                        <li><a href="https://github.com/NobleChicken97/self-healing-distributed-cache/blob/main/deploy/README.md" target="_blank">AWS Setup</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4 class="footer-heading">Connect</h4>
+                    <ul class="footer-links">
+                        <li><a href="https://github.com/NobleChicken97/self-healing-distributed-cache" target="_blank">GitHub</a></li>
+                        <li><a href="https://linkedin.com" target="_blank">LinkedIn</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="copyright">&copy; 2024 Self-Healing Distributed Cache. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

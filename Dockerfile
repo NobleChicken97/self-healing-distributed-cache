@@ -59,9 +59,10 @@ USER appuser
 EXPOSE 8080
 EXPOSE 7946
 
-# Health check using the /health endpoint
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+# Health check: disabled for scratch image (no shell/wget).
+# Use external health checking against GET /health endpoint.
+# Example: curl -f http://localhost:8080/health || exit 1
+HEALTHCHECK NONE
 
 # Default command
 ENTRYPOINT ["/cache-server"]

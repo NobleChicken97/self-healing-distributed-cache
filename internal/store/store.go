@@ -13,8 +13,7 @@ var ErrNotFound = errors.New("key not found")
 type entry struct {
 	value     string
 	expiresAt time.Time
-	version   int64     // Monotonically increasing version for quorum reads
-	updatedAt time.Time // Wall-clock time of last update for conflict resolution
+	version   int64 // Monotonically increasing version for quorum reads
 	// lruElement is a pointer to the element in the LRU list for O(1) access tracking.
 	// nil if LRU eviction is disabled.
 	lruElement *list.Element
@@ -111,7 +110,6 @@ func (s *Store) Set(key, value string, ttl time.Duration) {
 		value:      value,
 		expiresAt:  expiresAt,
 		version:    newVersion,
-		updatedAt:  time.Now(),
 		size:       entrySize,
 		lruElement: lruElement,
 	}
@@ -149,7 +147,6 @@ func (s *Store) SetWithExpiry(key, value string, expiresAt time.Time) {
 		value:      value,
 		expiresAt:  expiresAt,
 		version:    newVersion,
-		updatedAt:  time.Now(),
 		size:       entrySize,
 		lruElement: lruElement,
 	}
@@ -221,7 +218,6 @@ func (s *Store) SetVersion(key, value string, expiresAt time.Time, version int64
 		value:      value,
 		expiresAt:  expiresAt,
 		version:    version,
-		updatedAt:  time.Now(),
 		size:       entrySize,
 		lruElement: lruElement,
 	}

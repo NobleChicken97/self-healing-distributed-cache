@@ -26,6 +26,7 @@ func main() {
 	peers := flag.String("peers", "", "comma-separated HTTP peer addresses for ring/proxying (e.g. 10.0.0.2:8080); gossip seeds are derived as host:<cluster-port>")
 	gossipAdv := flag.String("gossip-advertise-addr", "", "host IP peers dial for gossip (e.g. the node's public IP behind Docker port mapping); empty = bind address (local dev only)")
 	clusterPort := flag.Int("cluster-port", 0, "port for cluster gossip (0 = auto)")
+	memCap := flag.Int64("mem-cap", 0, "per-node memory cap in bytes for LRU eviction (0 = unlimited)")
 	flag.Parse()
 
 	if *nodeID == "" {
@@ -41,14 +42,24 @@ func main() {
 	host := gossipBindAddr(*addr)
 
 	// Derive cluster bind port from HTTP port if not specified.
+	// Explicit uniform ports (e.g. -cluster-port 7946 on every node, as in
+	// Docker/Lightsail deploys) vs default per-node ports (HTTP+1000, as in
+	// local multi-process dev clusters) also decide how gossip seeds below
+	// are derived, since peers only carry HTTP addresses.
 	clusterBindPort := *clusterPort
+	useDefaultPorts := false
 	if clusterBindPort == 0 {
+		useDefaultPorts = true
 		_, portStr, _ := net.SplitHostPort(*addr)
 		port, _ := strconv.Atoi(portStr)
 		clusterBindPort = port + 1000 // e.g., :8080 -> :9080 for gossip
 	}
 
 	cache := store.New(time.Second)
+	if *memCap > 0 {
+		cache = store.NewWithEviction(time.Second, *memCap)
+		log.Printf("LRU eviction enabled with memory cap %d bytes", *memCap)
+	}
 	defer cache.Close()
 
 	r := ring.New(150)
@@ -72,7 +83,7 @@ func main() {
 		BindAddr:      host,
 		BindPort:      clusterBindPort,
 		AdvertiseAddr: *gossipAdv,
-		SeedPeers:     peersToGossipPeers(*peers, clusterBindPort),
+		SeedPeers:     peersToGossipPeers(*peers, clusterBindPort, useDefaultPorts),
 		OnTopologyChange: func(nodeID string, alive bool) {
 			if !alive {
 				log.Printf("[CLUSTER] node %s left/failed, triggering rebalance", nodeID)
@@ -125,9 +136,16 @@ func gossipBindAddr(addr string) string {
 
 // peersToGossipPeers derives memberlist seed addresses from the HTTP peer
 // list. -peers carries HTTP addresses (host:HTTPPort) used for the ring and
-// request proxying, but gossip must dial the cluster bind port, so each
-// peer's host is re-targeted at gossipPort. ":port" shorthand means localhost.
-func peersToGossipPeers(peers string, gossipPort int) []string {
+// request proxying, but gossip must dial a gossip port, which peers don't
+// advertise. Two conventions cover every documented setup:
+//   - explicit uniform gossip port (e.g. -cluster-port 7946 on every node, as
+//     in Docker/Lightsail deploys): seeds are host(peer):gossipPort.
+//   - default per-node ports (gossip = HTTP+1000, as in local multi-process
+//     dev clusters): seeds are host(peer):peerHTTPPort+1000.
+//
+// useDefaultPorts selects the second convention. ":port" shorthand means
+// localhost; peers without a usable port fall back to gossipPort.
+func peersToGossipPeers(peers string, gossipPort int, useDefaultPorts bool) []string {
 	if peers == "" {
 		return nil
 	}
@@ -137,7 +155,7 @@ func peersToGossipPeers(peers string, gossipPort int) []string {
 		if peer == "" {
 			continue
 		}
-		host, _, err := net.SplitHostPort(peer)
+		host, portStr, err := net.SplitHostPort(peer)
 		if err != nil || host == "" {
 			// ":port" form or bare hostname — treat as localhost or as-is.
 			if strings.HasPrefix(peer, ":") {
@@ -146,7 +164,13 @@ func peersToGossipPeers(peers string, gossipPort int) []string {
 				host = peer
 			}
 		}
-		result = append(result, net.JoinHostPort(host, strconv.Itoa(gossipPort)))
+		seedPort := gossipPort
+		if useDefaultPorts {
+			if p, perr := strconv.Atoi(portStr); perr == nil && p > 0 && p < 65535-1000 {
+				seedPort = p + 1000
+			}
+		}
+		result = append(result, net.JoinHostPort(host, strconv.Itoa(seedPort)))
 	}
 	return result
 }

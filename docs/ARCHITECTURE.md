@@ -232,19 +232,19 @@ New Node D Joins
 │  1. Client SET → Primary writes locally                     │
 │     │                                                       │
 │     ▼                                                       │
-│  2. Async replication to replicas                           │
+│  2. Async replication to each replica                       │
 │     │                                                       │
 │     ├── Success → Done                                      │
 │     │                                                       │
-│     └── Failure → Track in pendingRepls map                 │
+│     └── Failure → Track (key, replicaID) in pendingRepls    │
 │              │                                              │
 │              ▼                                              │
 │  3. Background retryLoop (every 5 seconds)                  │
 │     │                                                       │
 │     ▼                                                       │
-│  4. Retry failed replications                               │
+│  4. Retry per-replica: only failed replicas are retried     │
 │     │                                                       │
-│     ├── Success → Remove from pendingRepls                  │
+│     ├── Success → Remove (key, replicaID) from pendingRepls │
 │     │                                                       │
 │     └── Failure → Keep in pendingRepls (max 3 retries)      │
 │                                                             │

@@ -176,7 +176,28 @@ but both IAM roles only trusted the legacy format. Proven via CloudTrail + `gh a
   not touch — other projects use it) → pipeline now mints the ECR login token
   runner-side from OIDC creds (`ecr-token` step) and passes it over SSH.
 - [x] Docker group fixed on node 1/2/3; [x] runner-side token wired into all 3
-  deploy scripts; [ ] full Pipeline green (docker → deploy → smoke tests)
+  deploy scripts; [x] full Pipeline green (docker → deploy → smoke tests)
+
+## Comprehensive Audit & Hardening (2026-09-05)
+
+- [x] Fix Dockerfile healthcheck: scratch image has no wget, changed to HEALTHCHECK NONE with external check docs
+- [x] Update README.md: added cmd/cache to test list, expanded test coverage description
+- [x] Update docs/Plan.md: corrected package count from 7 to 10, added audit entry
+- [x] Update docs/Todos.md: checked off full Pipeline green
+- [x] Improve replication retry: track per-replica failures instead of per-key
+- [x] Add node recovery test: TestNodeRecoveryRebalance in audit/recovery_test.go
+- [x] Clean up chaos package: replace custom stringReader with strings.NewReader
+- [x] Run full test suite: all tests pass
+
+## Audit Round 2 - Deep Dive (2026-09-05)
+
+- [x] Fix resource leaks: defer resp.Body.Close() moved inside loop body in forwardToReplica (line 569) and forwardWithFallback (line 879)
+- [x] Restore replicationFactor: accidentally removed from Server.New(), restored to 2
+- [x] Synchronize README project structure: added audit/, deploy/, .github/workflows/, missing docs
+- [x] Update README test results: replaced stale timing table with package description table
+- [x] Update README configuration: added -advertise-addr, -gossip-advertise-addr, -mem-cap flags
+- [x] Update docs/Plan.md: added Audit Round 2 entry
+- [x] Verify all tests pass: 11 packages, go vet clean
 
 ## Gossip + Write-Path Fixes (2026-09-05) — unmasked stage by stage by the pipeline
 

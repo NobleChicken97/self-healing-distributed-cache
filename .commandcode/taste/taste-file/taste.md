@@ -16,6 +16,13 @@
 - Expects autonomous continuation — when the user says "continue" or "continue development", the agent should read the current project state and proceed without re-establishing context, re-explaining prior work, or asking clarifying questions. Confidence: 0.8
 - Uses session handoff files (e.g., session.txt) to transfer context between sessions — shares previous conversation dumps so the agent can pick up where the last session left off. Confidence: 0.7
 - Prefers thorough stress and chaos testing that actively tries to break the system — concurrent access, network partitions, node failures, data integrity under load — not just happy-path coverage. Confidence: 0.8
+- Prefers hands-on functional/end-to-end testing that simulates real user behavior — sending actual inputs, verifying outputs for correctness, checking SEO rules, and performing behavior analysis — not just unit tests or stress tests, but validating the app works correctly when actually used. Confidence: 0.85
 - Prefers project-specific CI/CD pipelines tailored to the actual deployment topology and failure modes of the project, not generic templates. Confidence: 0.7
 - Prefers a single consolidated GitHub Actions workflow file over multiple separate workflow files — "make it all into a single github action", doesn't want to see multiple workflows per deploy. Confidence: 0.9
 - Prefers finishing existing development work and hardening what already exists before adding new features or advancing to the next phase. Confidence: 0.65
+- Safety-first rule: never make changes that could break existing projects or infrastructure — when modifying shared resources (IAM roles, AWS configs), ensure other deployments remain unaffected. Confidence: 0.95
+- Expects proper, descriptive naming for all AWS resources created — no default or generic names. Confidence: 0.9
+- Prefers a systematic, diagnostic-first approach to infrastructure issues: analyze the full picture (check all related configs, test assumptions, trace the chain) before attempting fixes — solve like a senior cloud engineer, not trial-and-error. Confidence: 0.9
+- Prefers deep analysis of requirements (images, specs, references) before creating implementation plans — wants the agent to thoroughly understand the input before proposing a solution. Confidence: 0.85
+- Prefers zero-dependency, no-build-step solutions for front-end web development — chose vanilla HTML/CSS/JS over React/Vite/Next.js. Values simplicity and portability. Confidence: 0.7
+- Values professional, polished presentation for project showcase/portfolio purposes — cares about how the project looks to external viewers. Confidence: 0.75

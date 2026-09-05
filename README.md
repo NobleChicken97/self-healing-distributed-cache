@@ -156,8 +156,11 @@ See [docs/API.md](./docs/API.md) for complete API documentation.
 |------|---------|-------------|
 | `-addr` | `:8080` | HTTP listen address |
 | `-id` | `<addr>` | Unique node ID |
-| `-peers` | `` | Comma-separated peer addresses |
-| `-cluster-port` | `<port>+1000` | Gossip protocol port |
+| `-advertise-addr` | `<addr>` | Address advertised in ring (for NAT/Docker) |
+| `-peers` | `` | Comma-separated peer HTTP addresses |
+| `-cluster-port` | `<port>+1000` | Gossip protocol port (0 = auto) |
+| `-gossip-advertise-addr` | `` | Public IP for gossip (Docker/Lightsail) |
+| `-mem-cap` | `0` | Memory cap in bytes for LRU eviction (0 = unlimited) |
 
 ## Running Tests
 
@@ -177,27 +180,30 @@ go test -race ./...
 
 ## Test Results
 
-All tests pass (verified on Windows with Go 1.25):
+All 11 test packages pass (verified with Go 1.25):
 
-```
-ok  selfhealingcache/audit           6.171s
-ok  selfhealingcache/audit/rebalance 2.155s
-ok  selfhealingcache/audit/server    1.949s
-ok  selfhealingcache/internal/chaos  2.057s
-ok  selfhealingcache/internal/cluster 5.267s
-ok  selfhealingcache/internal/rebalance 1.862s
-ok  selfhealingcache/internal/ring   1.203s
-ok  selfhealingcache/internal/server 3.790s
-ok  selfhealingcache/internal/store  0.787s
-```
+| Package | Description |
+|---------|-------------|
+| `audit/` | Integration tests, recovery scenarios, rebalance stress |
+| `audit/rebalance/` | Rebalance boundary and stress tests |
+| `audit/server/` | Server endpoint and quorum tests |
+| `cmd/cache/` | CLI entrypoint and helper function tests |
+| `internal/chaos/` | Chaos test harness and repeatability |
+| `internal/cluster/` | SWIM failure detection tests |
+| `internal/rebalance/` | Key migration logic tests |
+| `internal/ring/` | Consistent hashing ring tests |
+| `internal/server/` | HTTP server routing, replication, failover tests |
+| `internal/store/` | KV store, TTL, LRU eviction tests |
 
 **Test coverage includes:**
 - Unit tests: store operations, ring hashing, consistent hashing distribution
 - Integration tests: replication, failover, rebalance, TTL consistency
-- Chaos tests: traffic generation, failure scenarios
-- Quorum tests: write/read with majority acknowledgment
+- Chaos tests: traffic generation, failure scenarios, repeatability
+- Quorum tests: write/read with majority acknowledgment, version conflict resolution
+- Load tests: throughput, concurrent clients, memory usage under load
+- Recovery tests: node failure and rejoin scenarios
 
-**Note:** Race detector (`-race`) requires a 64-bit GCC toolchain which may not be available on all Windows setups.
+**Note:** Race detector (`-race`) requires a 64-bit GCC toolchain which may not be available on all Windows setups. Run `go test ./... -count=1` to verify.
 
 ## Demo
 
@@ -244,11 +250,18 @@ design decision including:
 │   ├── ring/          # Consistent hashing ring
 │   ├── server/        # HTTP server with routing
 │   └── store/         # In-memory KV store with TTL
-└── docs/
-    ├── DECISIONS.md   # Tradeoff analysis
-    ├── Plan.md        # Implementation plan
-    ├── PRD.md         # Product requirements
-    └── Todos.md       # Development checklist
+├── audit/             # Integration and audit tests
+├── deploy/            # Terraform, CI/CD, deployment scripts
+├── docs/
+│   ├── API.md         # Complete API documentation
+│   ├── ARCHITECTURE.md # System architecture diagrams
+│   ├── DECISIONS.md   # Tradeoff analysis
+│   ├── DEPLOYMENT.md  # Deployment guide
+│   ├── Deliverables.md # Project deliverables checklist
+│   ├── Plan.md        # Implementation plan
+│   ├── PRD.md         # Product requirements
+│   └── Todos.md       # Development checklist
+└── .github/workflows/ # CI/CD pipeline definitions
 ```
 
 ## Key Design Decisions

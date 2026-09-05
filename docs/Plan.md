@@ -12,11 +12,13 @@
 - Phase 8 complete: LRU eviction policy with memory cap and O(1) access tracking.
 - Phase 9 complete: Quorum consistency mode with version tracking and majority acknowledgment.
 - All decision-log entries complete.
-- Validation: `go test ./...` passes (all 7 packages: store, ring, server, cluster, rebalance, chaos).
+- Validation: `go test ./...` passes (10 packages: store, ring, server, cluster, rebalance, chaos, cmd/cache, audit, audit/server, audit/rebalance).
 - `go test -race ./...` is blocked by the local Windows GCC toolchain (`cc1.exe` reports 64-bit mode is not compiled in).
 - Status: All phases complete. Ready for portfolio demonstration.
 - CI/CD (2026-09-05): fixed `sts:AssumeRoleWithWebIdentity` AccessDenied — repo uses GitHub immutable OIDC `sub` (created after 2026-07-15 cutoff); pipeline now assumes dedicated least-privilege role `shdc-github-actions-ecr` (see `deploy/github_oidc_shdc.tf`). Shared roles for other projects untouched.
 - Deploy (2026-09-05): pipeline fully green — runner-side ECR login (shared Lightsail role untouched), gossip over host networking with explicit advertise addr, aligned ring/gossip ID namespaces. Live: 3/3 nodes healthy, `alive_nodes: 3`, identical rings.
+- Audit (2026-09-05): comprehensive audit complete. Fixed Dockerfile healthcheck (scratch image compatibility), updated documentation, improved replication retry granularity, added node recovery test.
+- Audit Round 2 (2026-09-05): fixed resource leaks in forwardWithFallback/forwardToReplica (defer in loop), restored accidentally removed replicationFactor, synchronized all documentation (README project structure, test results, configuration flags).
 
 ## How to use this document
 Each phase has a goal, the key tradeoff decisions to actually understand (not just
