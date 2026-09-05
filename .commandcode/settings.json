@@ -38,7 +38,8 @@
       "Shell(ssh -i \"C:\\Users\\arpan.ARPAN\\.ssh\\cache-cluster-key\" -o StrictHostKeyChecking=no -o ConnectTimeout=10 admin@13.126.24.246 \"echo 'SSH connection successful'\")",
       "Shell(type:*)",
       "Shell(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i /dev/stdin admin@13.126.24.246 echo 'SSH connection successful')",
-      "Shell(cd \"C:\\Users\\arpan.ARPAN\\Desktop\\projects\\self healing distributed cache\" && powershell -Command \"Get-Content -Path 'internal\\store\\store.go' -TotalCount 130 -Skip 99 | ForEach-Object { $_.Replace('`t', '<TAB>') }\")"
+      "Shell(cd \"C:\\Users\\arpan.ARPAN\\Desktop\\projects\\self healing distributed cache\" && powershell -Command \"Get-Content -Path 'internal\\store\\store.go' -TotalCount 130 -Skip 99 | ForEach-Object { $_.Replace('`t', '<TAB>') }\")",
+      "Shell(aws ecr describe-repositories --repository-names self-healing-cache --region ap-south-1 2>$null; if ($LASTEXITCODE -ne 0) { aws ecr create-repository --repository-name self-healing-cache --region ap-south-1 --image-scanning-configuration scanOnPush=true })"
     ],
     "deny": [],
     "defaultMode": "default"

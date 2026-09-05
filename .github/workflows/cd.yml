@@ -8,6 +8,7 @@ on:
 env:
   AWS_REGION: ap-south-1
   ECR_REPOSITORY: self-healing-cache
+  ECR_REGISTRY: 522412052856.dkr.ecr.ap-south-1.amazonaws.com
 
 permissions:
   contents: read
@@ -34,14 +35,11 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/build-push-action@v5
-
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          images: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}
           tags: |
             type=sha
             type=ref,event=tag
@@ -78,8 +76,8 @@ jobs:
           username: admin
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            docker pull ${{ needs.build-and-push.outputs.image_tag }}
+            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
             docker stop cache-server || true
             docker rm cache-server || true
             docker run -d \
@@ -87,7 +85,7 @@ jobs:
               --restart always \
               -p 8080:8080 \
               -p 7946:7946 \
-              ${{ needs.build-and-push.outputs.image_tag }} \
+              ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
               -id node-1 \
               -peers "${{ secrets.LIGHTSAIL_NODE2_IP }}:8080,${{ secrets.LIGHTSAIL_NODE3_IP }}:8080"
@@ -99,8 +97,8 @@ jobs:
           username: admin
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            docker pull ${{ needs.build-and-push.outputs.image_tag }}
+            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
             docker stop cache-server || true
             docker rm cache-server || true
             docker run -d \
@@ -108,7 +106,7 @@ jobs:
               --restart always \
               -p 8080:8080 \
               -p 7946:7946 \
-              ${{ needs.build-and-push.outputs.image_tag }} \
+              ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
               -id node-2 \
               -peers "${{ secrets.LIGHTSAIL_NODE1_IP }}:8080,${{ secrets.LIGHTSAIL_NODE3_IP }}:8080"
@@ -120,8 +118,8 @@ jobs:
           username: admin
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            docker pull ${{ needs.build-and-push.outputs.image_tag }}
+            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
             docker stop cache-server || true
             docker rm cache-server || true
             docker run -d \
@@ -129,13 +127,18 @@ jobs:
               --restart always \
               -p 8080:8080 \
               -p 7946:7946 \
-              ${{ needs.build-and-push.outputs.image_tag }} \
+              ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
               -id node-3 \
               -peers "${{ secrets.LIGHTSAIL_NODE1_IP }}:8080,${{ secrets.LIGHTSAIL_NODE2_IP }}:8080"
 
       - name: Verify deployment
         run: |
-          sleep 10
+          sleep 15
+          echo "Verifying node 1..."
           curl -f http://${{ secrets.LIGHTSAIL_NODE1_IP }}:8080/ring/info || exit 1
-          echo "✅ Deployment verified!"
+          echo "Verifying node 2..."
+          curl -f http://${{ secrets.LIGHTSAIL_NODE2_IP }}:8080/ring/info || exit 1
+          echo "Verifying node 3..."
+          curl -f http://${{ secrets.LIGHTSAIL_NODE3_IP }}:8080/ring/info || exit 1
+          echo "✅ All nodes verified!"

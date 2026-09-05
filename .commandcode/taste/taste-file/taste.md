@@ -6,3 +6,6 @@
 - Prefers structured architectural decision records (DECISIONS.md) that document: context, options considered, the choice made, explicit tradeoff analysis (what was given up vs. gained), and test verification. Confidence: 0.85
 - Prefers infrastructure-as-code (Terraform) for provisioning cloud resources over manual setup. Confidence: 0.85
 - Prefers detailed, actionable step-by-step instructions with concrete commands when asking how to accomplish something — wants exact steps to execute, not high-level descriptions. Confidence: 0.75
+- Prefers automated CI/CD pipelines with GitHub Actions for build, test, and deploy workflows. Confidence: 0.85
+- Prefers containerized deployment workflow: build Docker image → push to registry (ECR) → pull on servers → redeploy. Confidence: 0.85
+- Prefers push-to-deploy model where pushing to main automatically triggers deployment to production. Confidence: 0.8

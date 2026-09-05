@@ -1,6 +1,10 @@
-A subdirectory or file -p already exists.
-Error occurred while processing: -p.
-The filename, directory name, or volume label syntax is incorrect.
-Error occurred while processing: $env:USERPROFILE\.ssh.
-The filename, directory name, or volume label syntax is incorrect.
-Error occurred while processing: $?).
+
+usage: aws [options] <command> <subcommand> [<subcommand> ...] [parameters]
+To see help text, you can run:
+
+  aws help
+  aws <command> help
+  aws <command> <subcommand> help
+
+
+aws: [ERROR]: Unknown options: -ne, {, aws, ecr, create-repository, --image-scanning-configuration, scanOnPush=true, }, 0)
