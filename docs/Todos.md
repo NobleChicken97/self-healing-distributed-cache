@@ -177,3 +177,23 @@ but both IAM roles only trusted the legacy format. Proven via CloudTrail + `gh a
   runner-side from OIDC creds (`ecr-token` step) and passes it over SSH.
 - [x] Docker group fixed on node 1/2/3; [x] runner-side token wired into all 3
   deploy scripts; [ ] full Pipeline green (docker → deploy → smoke tests)
+
+## Gossip + Write-Path Fixes (2026-09-05) — unmasked stage by stage by the pipeline
+
+- Gossip seeds dialed the HTTP port while memberlist bound 9080 (default):
+  `peersToGossipPeers` now derives `host(peer):cluster-port`; deploy passes
+  `-cluster-port 7946` (the published/firewalled port).
+- Gossip bound 127.0.0.1 (`connection refused` via Docker mapping):
+  `gossipBindAddr` binds 0.0.0.0 for empty hosts; UDP 7946 opened (container
+  mapping + Lightsail firewall).
+- Bridge NAT rewrote UDP sources so probes were "unexpected nodes" forever:
+  new `-gossip-advertise-addr` (public IP per node) + `--network host`.
+- Ring/gossip ID namespaces diverged (`-id node-N` vs `IP:port` peers):
+  every peer looked dead and rings disagreed on ownership. Nodes now use
+  `-id IP:8080` + `-advertise-addr IP:8080` → identical ring sets everywhere.
+- `forwardWithBody` handed the failover path a consumed (empty) body → 400
+  `invalid JSON body` on replica-accepted writes; body restored first.
+- [x] Unit tests: `TestPeersToGossipPeers`, `TestGossipBindAddr`,
+  `TestClusterAdvertiseAddrConverges`, `TestDeadPrimarySetAcceptedByReplica`
+  (the last fails without its fix — verified via stash)
+- [ ] Full Pipeline green incl. CRUD + perf smoke tests on Lightsail
