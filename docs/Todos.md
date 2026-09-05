@@ -166,3 +166,14 @@ but both IAM roles only trusted the legacy format. Proven via CloudTrail + `gh a
 - [x] Create isolated `shdc-github-actions-ecr` role + `shdc-ecr-push-pull` least-privilege policy via Terraform (`deploy/github_oidc_shdc.tf`) — shared roles untouched
 - [x] Point `AWS_ROLE_ARN` secret at the new role; rerun failed pipeline to verify ECR push + Lightsail deploy
 - [x] Record immutable-sub trust in `deploy/shdc-github-oidc-trust.json` and pipeline.yml comment
+
+## Deploy Stage Fix (2026-09-05) — unmasked once Docker push succeeded
+
+- Node `admin` was not in the `docker` group (socket `root:docker`) → fixed
+  node-local via `sudo usermod -aG docker admin` on all 3 SHDC nodes, verified
+  with a fresh login (`docker ps` works, no AWS changes).
+- Nodes use the shared `AmazonLightsailInstanceRole` with no ECR rights (must
+  not touch — other projects use it) → pipeline now mints the ECR login token
+  runner-side from OIDC creds (`ecr-token` step) and passes it over SSH.
+- [x] Docker group fixed on node 1/2/3; [x] runner-side token wired into all 3
+  deploy scripts; [ ] full Pipeline green (docker → deploy → smoke tests)

@@ -288,6 +288,18 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # Runner-side ECR token (2026-09-05): Lightsail nodes use the shared
+      # AmazonLightsailInstanceRole, which has no ECR rights (and we must not
+      # touch that shared role — other projects' instances use it). So the
+      # runner mints the 12h login token with its OIDC creds and passes it
+      # over SSH. Nodes never need AWS ECR permissions of their own.
+      - name: Get ECR login token (runner-side, OIDC creds)
+        id: ecr-token
+        run: |
+          TOKEN=$(aws ecr get-login-password --region "${{ env.AWS_REGION }}")
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
       # Rolling deployment: one node at a time with health checks
       - name: Deploy to Node 1
         uses: appleboy/ssh-action@v1
@@ -296,7 +308,7 @@ jobs:
           username: admin
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            echo "${{ steps.ecr-token.outputs.token }}" | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
             docker stop cache-server || true
             docker rm cache-server || true
@@ -330,7 +342,7 @@ jobs:
           username: admin
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            echo "${{ steps.ecr-token.outputs.token }}" | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
             docker stop cache-server || true
             docker rm cache-server || true
@@ -364,7 +376,7 @@ jobs:
           username: admin
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            echo "${{ steps.ecr-token.outputs.token }}" | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }}
             docker stop cache-server || true
             docker rm cache-server || true
