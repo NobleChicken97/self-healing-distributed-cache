@@ -230,4 +230,3 @@ func TestNormalEndpointVsQuorumEndpoint(t *testing.T) {
 		t.Logf("quorum set returned %d (may fail if replicas unreachable)", quorumSetCode)
 	}
 }
-

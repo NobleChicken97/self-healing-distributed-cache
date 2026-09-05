@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/ring"
 	"selfhealingcache/internal/rebalance"
+	"selfhealingcache/internal/ring"
 )
 
 // TestRebalanceLargeDataset tests migration of 10,000+ keys

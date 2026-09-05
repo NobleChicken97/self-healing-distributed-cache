@@ -821,7 +821,7 @@ func (s *Server) handleQuorumSet(w http.ResponseWriter, r *http.Request) {
 	// Replicate to replicas and wait for quorum.
 	// Quorum = majority of all nodes (primary + replicas)
 	replicas := s.ring.Replicas(req.Key, s.replicationFactor)
-	totalNodes := len(replicas) + 1 // +1 for primary
+	totalNodes := len(replicas) + 1      // +1 for primary
 	quorumNeeded := (totalNodes / 2) + 1 // Majority
 
 	replicaAcks := 0
@@ -846,11 +846,11 @@ func (s *Server) handleQuorumSet(w http.ResponseWriter, r *http.Request) {
 		s.logger.Printf("[QUORUM] write failed: got %d acks (%d replicas + primary), needed %d: %v",
 			totalAcks, replicaAcks, quorumNeeded, lastErr)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"status":      "quorum_failed",
-			"acks":        totalAcks,
+			"status":       "quorum_failed",
+			"acks":         totalAcks,
 			"replica_acks": replicaAcks,
-			"needed":      quorumNeeded,
-			"error":       lastErr,
+			"needed":       quorumNeeded,
+			"error":        lastErr,
 		})
 		return
 	}

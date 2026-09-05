@@ -135,7 +135,7 @@ func TestChaosRepeatability(t *testing.T) {
 	// Flag any runs that differ significantly from the mean
 	meanTotal := float64(sumTotal) / float64(numRuns)
 	for _, r := range results {
-		deviation := math.Abs(float64(r.TotalRequests) - meanTotal) / meanTotal
+		deviation := math.Abs(float64(r.TotalRequests)-meanTotal) / meanTotal
 		if deviation > 0.5 { // More than 50% deviation
 			t.Logf("WARNING: Run %d has %.1f%% deviation from mean total requests", r.Run, deviation*100)
 		}
