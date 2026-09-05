@@ -23,7 +23,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	advertiseAddr := flag.String("advertise-addr", "", "address advertised in ring (defaults to addr)")
 	nodeID := flag.String("id", "", "unique node ID (defaults to addr)")
-	peers := flag.String("peers", "", "comma-separated list of peer addresses (e.g. :8081,:8082)")
+	peers := flag.String("peers", "", "comma-separated HTTP peer addresses for ring/proxying (e.g. 10.0.0.2:8080); gossip seeds are derived as host:<cluster-port>")
 	clusterPort := flag.Int("cluster-port", 0, "port for cluster gossip (0 = auto)")
 	flag.Parse()
 
@@ -74,7 +74,7 @@ func main() {
 		NodeID:    *nodeID,
 		BindAddr:  host,
 		BindPort:  clusterBindPort,
-		SeedPeers: peersToHostPort(*peers),
+		SeedPeers: peersToGossipPeers(*peers, clusterBindPort),
 		OnTopologyChange: func(nodeID string, alive bool) {
 			if !alive {
 				log.Printf("[CLUSTER] node %s left/failed, triggering rebalance", nodeID)
@@ -113,8 +113,11 @@ func main() {
 	}
 }
 
-// peersToHostPort converts ":port" addresses to "host:port" for memberlist.
-func peersToHostPort(peers string) []string {
+// peersToGossipPeers derives memberlist seed addresses from the HTTP peer
+// list. -peers carries HTTP addresses (host:HTTPPort) used for the ring and
+// request proxying, but gossip must dial the cluster bind port, so each
+// peer's host is re-targeted at gossipPort. ":port" shorthand means localhost.
+func peersToGossipPeers(peers string, gossipPort int) []string {
 	if peers == "" {
 		return nil
 	}
@@ -124,11 +127,16 @@ func peersToHostPort(peers string) []string {
 		if peer == "" {
 			continue
 		}
-		if strings.HasPrefix(peer, ":") {
-			result = append(result, "127.0.0.1"+peer)
-		} else {
-			result = append(result, peer)
+		host, _, err := net.SplitHostPort(peer)
+		if err != nil || host == "" {
+			// ":port" form or bare hostname — treat as localhost or as-is.
+			if strings.HasPrefix(peer, ":") {
+				host = "127.0.0.1"
+			} else {
+				host = peer
+			}
 		}
+		result = append(result, net.JoinHostPort(host, strconv.Itoa(gossipPort)))
 	}
 	return result
 }

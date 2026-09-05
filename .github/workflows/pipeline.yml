@@ -322,6 +322,7 @@ jobs:
               -p 7946:7946 \
               ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
+              -cluster-port 7946 \
               -id node-1 \
               -peers "${{ secrets.LIGHTSAIL_NODE2_IP }}:8080,${{ secrets.LIGHTSAIL_NODE3_IP }}:8080"
 
@@ -356,6 +357,7 @@ jobs:
               -p 7946:7946 \
               ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
+              -cluster-port 7946 \
               -id node-2 \
               -peers "${{ secrets.LIGHTSAIL_NODE1_IP }}:8080,${{ secrets.LIGHTSAIL_NODE3_IP }}:8080"
 
@@ -390,6 +392,7 @@ jobs:
               -p 7946:7946 \
               ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ github.sha }} \
               -addr :8080 \
+              -cluster-port 7946 \
               -id node-3 \
               -peers "${{ secrets.LIGHTSAIL_NODE1_IP }}:8080,${{ secrets.LIGHTSAIL_NODE2_IP }}:8080"
 
