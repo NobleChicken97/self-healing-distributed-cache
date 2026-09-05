@@ -602,3 +602,73 @@ func TestQuorumWriteAndRead(t *testing.T) {
 	}
 	t.Logf("quorum read response: %s", string(body))
 }
+
+// TestDeadPrimarySetAcceptedByReplica verifies that a write for a key whose
+// primary is known dead is accepted by a replica with the FULL reconstructed
+// body. Regression test: forwardWithBody used to hand forwardToReplica an
+// already-consumed (empty) request body, so the replica rejected the write
+// with 400 "invalid JSON body".
+func TestDeadPrimarySetAcceptedByReplica(t *testing.T) {
+	st := store.New(time.Second)
+	defer st.Close()
+
+	r := ring.New(10)
+	r.AddNode(ring.Node{ID: "node-a", Addr: "127.0.0.1:19001"})
+	r.AddNode(ring.Node{ID: "node-b", Addr: "127.0.0.1:19002"})
+	r.AddNode(ring.Node{ID: "node-c", Addr: "127.0.0.1:19003"})
+
+	c, err := cluster.New(cluster.Config{
+		NodeID:   "node-a",
+		BindAddr: "127.0.0.1",
+		BindPort: 19000,
+		Logger:   log.New(os.Stderr, "[TEST] ", log.Ltime),
+	})
+	if err != nil {
+		t.Fatalf("failed to create cluster: %v", err)
+	}
+	defer c.Shutdown()
+
+	srv := New(st, "node-a", r).WithCluster(c)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Find a key whose primary is a dead peer while node-a is a replica.
+	// In a fresh cluster only node-a is alive, so every peer is "known dead".
+	var testKey string
+	for i := 0; i < 1000; i++ {
+		key := fmt.Sprintf("dead-primary-set-%d", i)
+		primary, _ := r.Lookup(key)
+		if primary.ID == "node-a" {
+			continue
+		}
+		for _, rep := range r.Replicas(key, 2) {
+			if rep.ID == "node-a" {
+				testKey = key
+				goto found
+			}
+		}
+	}
+	t.Fatal("could not find a suitable key for testing")
+found:
+	t.Logf("test key: %s (node-a is replica, primary is dead)", testKey)
+
+	setBody := fmt.Sprintf(`{"key":"%s","value":"replica-accept","ttl_ms":60000}`, testKey)
+	resp, err := http.Post(ts.URL+"/set", "application/json", strings.NewReader(setBody))
+	if err != nil {
+		t.Fatalf("set request failed: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("dead-primary write rejected: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	// The replica must have stored the full value (not an empty body).
+	got, err := st.Get(testKey)
+	if err != nil {
+		t.Fatalf("key missing from replica store: %v", err)
+	}
+	if got != "replica-accept" {
+		t.Fatalf("replica stored %q, want %q", got, "replica-accept")
+	}
+}

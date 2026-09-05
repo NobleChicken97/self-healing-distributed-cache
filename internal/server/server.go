@@ -454,8 +454,13 @@ func (s *Server) forwardWithBody(w http.ResponseWriter, r *http.Request, key str
 		return
 	}
 
-	// If primary is known dead, route to a replica instead.
+	// If primary is known dead, route to a replica instead. Restore the
+	// reconstructed body first: the original request body was already
+	// consumed by JSON decoding, and forwardToReplica re-reads r.Body —
+	// without this it sees an empty body and rejects the write with 400.
 	if !s.isNodeAlive(owner.ID) {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
 		s.forwardToReplica(w, r, key)
 		return
 	}

@@ -327,7 +327,8 @@ jobs:
               -addr :8080 \
               -cluster-port 7946 \
               -gossip-advertise-addr ${{ secrets.LIGHTSAIL_NODE1_IP }} \
-              -id node-1 \
+              -id ${{ secrets.LIGHTSAIL_NODE1_IP }}:8080 \
+              -advertise-addr ${{ secrets.LIGHTSAIL_NODE1_IP }}:8080 \
               -peers "${{ secrets.LIGHTSAIL_NODE2_IP }}:8080,${{ secrets.LIGHTSAIL_NODE3_IP }}:8080"
 
       - name: Wait for Node 1 to be healthy
@@ -362,7 +363,8 @@ jobs:
               -addr :8080 \
               -cluster-port 7946 \
               -gossip-advertise-addr ${{ secrets.LIGHTSAIL_NODE2_IP }} \
-              -id node-2 \
+              -id ${{ secrets.LIGHTSAIL_NODE2_IP }}:8080 \
+              -advertise-addr ${{ secrets.LIGHTSAIL_NODE2_IP }}:8080 \
               -peers "${{ secrets.LIGHTSAIL_NODE1_IP }}:8080,${{ secrets.LIGHTSAIL_NODE3_IP }}:8080"
 
       - name: Wait for Node 2 to be healthy
@@ -397,7 +399,8 @@ jobs:
               -addr :8080 \
               -cluster-port 7946 \
               -gossip-advertise-addr ${{ secrets.LIGHTSAIL_NODE3_IP }} \
-              -id node-3 \
+              -id ${{ secrets.LIGHTSAIL_NODE3_IP }}:8080 \
+              -advertise-addr ${{ secrets.LIGHTSAIL_NODE3_IP }}:8080 \
               -peers "${{ secrets.LIGHTSAIL_NODE1_IP }}:8080,${{ secrets.LIGHTSAIL_NODE2_IP }}:8080"
 
       - name: Wait for Node 3 to be healthy
