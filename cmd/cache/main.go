@@ -21,6 +21,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
+	advertiseAddr := flag.String("advertise-addr", "", "address advertised in ring (defaults to addr)")
 	nodeID := flag.String("id", "", "unique node ID (defaults to addr)")
 	peers := flag.String("peers", "", "comma-separated list of peer addresses (e.g. :8081,:8082)")
 	clusterPort := flag.Int("cluster-port", 0, "port for cluster gossip (0 = auto)")
@@ -28,6 +29,9 @@ func main() {
 
 	if *nodeID == "" {
 		*nodeID = *addr
+	}
+	if *advertiseAddr == "" {
+		*advertiseAddr = *addr
 	}
 
 	// Parse host from addr for cluster binding.
@@ -51,7 +55,7 @@ func main() {
 	defer cache.Close()
 
 	r := ring.New(150)
-	r.AddNode(ring.Node{ID: *nodeID, Addr: *addr})
+	r.AddNode(ring.Node{ID: *nodeID, Addr: *advertiseAddr})
 	if *peers != "" {
 		for _, peer := range strings.Split(*peers, ",") {
 			peer = strings.TrimSpace(peer)
