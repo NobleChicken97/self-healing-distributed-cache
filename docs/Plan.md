@@ -15,6 +15,7 @@
 - Validation: `go test ./...` passes (all 7 packages: store, ring, server, cluster, rebalance, chaos).
 - `go test -race ./...` is blocked by the local Windows GCC toolchain (`cc1.exe` reports 64-bit mode is not compiled in).
 - Status: All phases complete. Ready for portfolio demonstration.
+- CI/CD (2026-09-05): fixed `sts:AssumeRoleWithWebIdentity` AccessDenied — repo uses GitHub immutable OIDC `sub` (created after 2026-07-15 cutoff); pipeline now assumes dedicated least-privilege role `shdc-github-actions-ecr` (see `deploy/github_oidc_shdc.tf`). Shared roles for other projects untouched.
 
 ## How to use this document
 Each phase has a goal, the key tradeoff decisions to actually understand (not just

@@ -54,9 +54,10 @@ COPY --from=builder /build/cache-client /cache-client
 # Use non-root user
 USER appuser
 
-# Expose ports
-EXPOSE 8080  # HTTP API
-EXPOSE 7946  # Gossip protocol
+# Expose ports (HTTP API + gossip protocol). Note: EXPOSE takes only port
+# numbers — inline comments become extra "ports" and fail the build.
+EXPOSE 8080
+EXPOSE 7946
 
 # Health check using the /health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

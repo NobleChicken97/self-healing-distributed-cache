@@ -63,9 +63,22 @@ aws iam create-open-id-connect-provider \
 
 ## Step 3: Create IAM Role for GitHub Actions
 
+> **2026-09-05 fix — immutable OIDC subject (read this first):** this repo was
+> created 2026-09-04, after GitHub's 2026-07-15 cutoff, so GitHub mints
+> **immutable** `sub` claims with numeric IDs:
+> `repo:NobleChicken97@141447050/self-healing-distributed-cache@1357349698:...`
+> (owner ID `141447050`, repo ID `1357349698` — verify with
+> `gh api repos/NobleChicken97/self-healing-distributed-cache --jq '{.id, .owner.id}'`).
+> The legacy pattern `repo:NobleChicken97/self-healing-distributed-cache:*` **never
+> matches** and fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
+> The pipeline therefore uses a dedicated role managed in
+> [`github_oidc_shdc.tf`](./github_oidc_shdc.tf) (`terraform output shdc_github_actions_role_arn`).
+> Do NOT reuse the legacy-format shared roles (`GitHubActionsECRPush`,
+> `github-actions-ecr-role`) — they belong to older pre-cutoff projects.
+
 Create a role that GitHub Actions can assume to push to ECR.
 
-### Trust Policy (`github-oidc-trust.json`):
+### Trust Policy (`shdc-github-oidc-trust.json`):
 
 ```json
 {
@@ -82,7 +95,7 @@ Create a role that GitHub Actions can assume to push to ECR.
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:NobleChicken97/self-healing-distributed-cache:*"
+          "token.actions.githubusercontent.com:sub": "repo:NobleChicken97@141447050/self-healing-distributed-cache@1357349698:*"
         }
       }
     }
@@ -90,21 +103,40 @@ Create a role that GitHub Actions can assume to push to ECR.
 }
 ```
 
-### Create the role:
+> Immutable-sub format required (see note above). The checked-in copy is
+> [`shdc-github-oidc-trust.json`](./shdc-github-oidc-trust.json).
+
+### Create the role (managed by Terraform — preferred):
+
+```bash
+cd deploy/
+terraform plan \
+  "-target=aws_iam_role.shdc_github_actions_ecr" \
+  "-target=aws_iam_policy.shdc_ecr_push_pull" \
+  "-target=aws_iam_role_policy_attachment.shdc_ecr" \
+  "-out=shdc-oidc.plan"
+terraform apply shdc-oidc.plan
+
+# Get the role ARN for the AWS_ROLE_ARN secret
+terraform output -raw shdc_github_actions_role_arn
+```
+
+### Create the role (manual fallback):
 
 ```bash
 # Create role
 aws iam create-role \
-  --role-name github-actions-ecr-role \
-  --assume-role-policy-document file://github-oidc-trust.json
+  --role-name shdc-github-actions-ecr \
+  --assume-role-policy-document file://shdc-github-oidc-trust.json
 
-# Attach ECR push policy
+# Attach the least-privilege ECR policy (scoped to self-healing-cache only,
+# NOT AmazonEC2ContainerRegistryFullAccess)
 aws iam attach-role-policy \
-  --role-name github-actions-ecr-role \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+  --role-name shdc-github-actions-ecr \
+  --policy-arn arn:aws:iam::522412052856:policy/shdc-ecr-push-pull
 
 # Get the role ARN
-aws iam get-role --role-name github-actions-ecr-role --query Role.Arn --output text
+aws iam get-role --role-name shdc-github-actions-ecr --query Role.Arn --output text
 ```
 
 ---
@@ -221,7 +253,12 @@ curl http://15.252.208.189:8080/ring/info
 ### GitHub Actions can't push to ECR
 - Verify OIDC provider is created
 - Check IAM role trust policy matches your repo
-- Verify `AWS_ROLE_ARN` secret is correct
+- **If `sts:AssumeRoleWithWebIdentity` is denied:** check the token's actual `sub`
+  in CloudTrail (`AssumeRoleWithWebIdentity` events). Repos created after
+  2026-07-15 use the immutable format
+  `repo:OWNER@OWNER-ID/REPO@REPO-ID:...` — the legacy `repo:OWNER/REPO:*`
+  pattern will never match. See Step 3.
+- Verify `AWS_ROLE_ARN` secret is correct (must be the `shdc-github-actions-ecr` ARN)
 
 ### Lightsail nodes can't pull from ECR
 - Ensure AWS CLI is installed on nodes

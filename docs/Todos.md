@@ -156,3 +156,13 @@ Post-review validation note: All critical fixes implemented and tested. Race det
 - [x] Add integration test TestAutoRebalanceOnNodeFailure verifying auto-rebalance
 - [x] All tests pass: `go test ./... -count=1` (11 test packages)
 - [x] Race detector: blocked by local Windows GCC toolchain (documented limitation)
+
+## CI/CD OIDC Fix (2026-09-05) — Pipeline run 33962240799 was failing at Docker Build & Push
+
+Root cause: repo created 2026-09-04 (after GitHub's 2026-07-15 cutoff), so GitHub
+mints immutable OIDC `sub` (`repo:NobleChicken97@141447050/self-healing-distributed-cache@1357349698:...`),
+but both IAM roles only trusted the legacy format. Proven via CloudTrail + `gh api` + GitHub docs.
+- [x] Prove root cause from CloudTrail AssumeRoleWithWebIdentity events (actual `sub` vs trust policy)
+- [x] Create isolated `shdc-github-actions-ecr` role + `shdc-ecr-push-pull` least-privilege policy via Terraform (`deploy/github_oidc_shdc.tf`) — shared roles untouched
+- [x] Point `AWS_ROLE_ARN` secret at the new role; rerun failed pipeline to verify ECR push + Lightsail deploy
+- [x] Record immutable-sub trust in `deploy/shdc-github-oidc-trust.json` and pipeline.yml comment
