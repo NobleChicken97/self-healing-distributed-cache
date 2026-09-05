@@ -5,3 +5,4 @@
 - Pick the best-fit skill(s) and MCP tool(s) for each task rather than defaulting to a single approach. Confidence: 0.85
 - Prefers structured architectural decision records (DECISIONS.md) that document: context, options considered, the choice made, explicit tradeoff analysis (what was given up vs. gained), and test verification. Confidence: 0.85
 - Prefers infrastructure-as-code (Terraform) for provisioning cloud resources over manual setup. Confidence: 0.85
+- Prefers detailed, actionable step-by-step instructions with concrete commands when asking how to accomplish something — wants exact steps to execute, not high-level descriptions. Confidence: 0.75
