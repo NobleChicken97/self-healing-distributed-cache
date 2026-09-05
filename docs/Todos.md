@@ -196,4 +196,5 @@ but both IAM roles only trusted the legacy format. Proven via CloudTrail + `gh a
 - [x] Unit tests: `TestPeersToGossipPeers`, `TestGossipBindAddr`,
   `TestClusterAdvertiseAddrConverges`, `TestDeadPrimarySetAcceptedByReplica`
   (the last fails without its fix — verified via stash)
-- [ ] Full Pipeline green incl. CRUD + perf smoke tests on Lightsail
+- [x] Full Pipeline green incl. CRUD + perf smoke tests on Lightsail
+  (run 33969546547: all stages success; live `alive_nodes: 3`, identical rings)

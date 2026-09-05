@@ -170,23 +170,19 @@ Copy the entire content (including `-----BEGIN RSA PRIVATE KEY-----` and `-----E
 
 ---
 
-## Step 5: Install AWS CLI on Lightsail Nodes
+## Step 5: Prepare Lightsail Nodes (one-time)
 
-Each Lightsail node needs AWS CLI to pull from ECR.
+Each node needs Docker with `admin` in the `docker` group. No AWS/ECR
+credentials are needed on the nodes — the pipeline mints the ECR login token
+runner-side from OIDC creds (`ecr-token` step) and passes it over SSH, so the
+shared `AmazonLightsailInstanceRole` stays untouched.
 
 SSH into each node and run:
 
 ```bash
-# Install AWS CLI
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
-
-# Verify
-aws --version
-
-# Configure region (no credentials needed - uses instance role or IAM user)
-aws configure set region ap-south-1
+# Install Docker (if missing) and allow admin to use it (re-login after)
+sudo apt-get install -y docker.io
+sudo usermod -aG docker admin
 ```
 
 ---

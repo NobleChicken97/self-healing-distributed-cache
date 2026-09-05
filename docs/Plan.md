@@ -16,6 +16,7 @@
 - `go test -race ./...` is blocked by the local Windows GCC toolchain (`cc1.exe` reports 64-bit mode is not compiled in).
 - Status: All phases complete. Ready for portfolio demonstration.
 - CI/CD (2026-09-05): fixed `sts:AssumeRoleWithWebIdentity` AccessDenied — repo uses GitHub immutable OIDC `sub` (created after 2026-07-15 cutoff); pipeline now assumes dedicated least-privilege role `shdc-github-actions-ecr` (see `deploy/github_oidc_shdc.tf`). Shared roles for other projects untouched.
+- Deploy (2026-09-05): pipeline fully green — runner-side ECR login (shared Lightsail role untouched), gossip over host networking with explicit advertise addr, aligned ring/gossip ID namespaces. Live: 3/3 nodes healthy, `alive_nodes: 3`, identical rings.
 
 ## How to use this document
 Each phase has a goal, the key tradeoff decisions to actually understand (not just
