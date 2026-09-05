@@ -31,13 +31,13 @@ type Server struct {
 	rebalancerMu      sync.Mutex // protects rebalancer field
 
 	// replication tracking for graceful shutdown
-	replWg          sync.WaitGroup
-	replStop        chan struct{}
-	replMu          sync.Mutex
-	pendingRepls    map[string]time.Time // key -> first failed time
-	maxRetries      int
-	retryInterval   time.Duration
-	retryDone       chan struct{}
+	replWg        sync.WaitGroup
+	replStop      chan struct{}
+	replMu        sync.Mutex
+	pendingRepls  map[string]time.Time // key -> first failed time
+	maxRetries    int
+	retryInterval time.Duration
+	retryDone     chan struct{}
 }
 
 // pendingReplication tracks a failed replication for retry.
