@@ -677,6 +677,7 @@ func TestPrimaryMissFallsBackToReplica(t *testing.T) {
 		t.Fatalf("expected 404 for absent key, got %d", resp.StatusCode)
 	}
 }
+
 // TestDeadPrimarySetAcceptedByReplica verifies that a write for a key whose
 // primary is known dead is accepted by a replica with the FULL reconstructed
 // body. Regression test: forwardWithBody used to hand forwardToReplica an
