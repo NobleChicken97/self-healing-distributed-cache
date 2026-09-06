@@ -290,7 +290,8 @@ ECR repo stays, live Lightsail names stay (no destroy/recreate).
 - [x] Deliberately untouched: repo URL/sub, ECR name, instance/key names,
   binary names (`cache-server`), functional IDs (`node-N` mappings),
   historical log entries, `.commandcode` tool state
-- [ ] Pipeline green + live verify post-rename
+- [x] Pipeline green on rename (run 34031351816 incl. audit on Linux);
+  live: new title served, cluster 3/3
 
 ## Interview Prep (2026-09-06) — guide.md for Eli Lilly SWE loop
 
