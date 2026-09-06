@@ -183,9 +183,12 @@
 
   /* ---------- polling ---------- */
   var lastAlive = {};
+  var pollFails = 0;
+  var lastRenderSig = "";
   function poll() {
     if (document.hidden) return;
     fetchTimeout("/ring/info").then(getJSON).then(function (ring) {
+      pollFails = 0;
       var addrs = (ring.ring_nodes || []).map(function (n) { return n.Addr; }).filter(Boolean);
       state.ring = addrs;
       state.self = ring.node_id || "";
@@ -210,8 +213,14 @@
     }).then(function (results) {
       if (!results) return;
       state.nodes = results.map(function (r) { return r.value; });
-      renderMesh(state.nodes);
-      renderNodes(state.nodes);
+      // Skip re-render when nothing changed: rebuilding the SVG/select every
+      // poll would restart animations and steal focus from open controls.
+      var sig = JSON.stringify(state.nodes);
+      if (sig !== lastRenderSig) {
+        lastRenderSig = sig;
+        renderMesh(state.nodes);
+        renderNodes(state.nodes);
+      }
       // masthead
       var down = state.nodes.filter(function (n) { return n.silent; }).length;
       var lamp = document.getElementById("liveLamp");
@@ -231,22 +240,36 @@
         }
         lastAlive[n.addr] = n.alive;
       });
-      // ticker
+      // ticker (N/N uses live membership, never a hardcoded cluster size)
       var facts = state.nodes.map(function (n) {
-        return n.short + " " + (n.silent ? "silent" : n.alive + "/3 alive · " + n.entries + " entries");
+        return n.short + " " + (n.silent ? "silent" : n.alive + "/" + state.nodes.length + " alive · " + n.entries + " entries");
       }).join("  ·  ") + "  ·  RF 2 · 150 vnodes · gossip :7946  ·  ";
       document.getElementById("tickerA").textContent = facts;
       document.getElementById("tickerB").textContent = facts;
       document.getElementById("meshSummary").textContent =
         state.nodes.map(function (n) { return n.short + ": " + (n.silent ? "silent" : n.alive + " alive"); }).join(" — ");
     }).catch(function (err) {
+      pollFails++;
       document.getElementById("liveLamp").className = "lamp off";
       document.getElementById("liveText").textContent = "unreachable — is a node serving this page?";
       document.getElementById("meshSummary").textContent = "poll failed: " + err.message;
+      // Don't grey the board on a single blip; after repeats, mark stale.
+      if (pollFails >= 2) {
+        lastRenderSig = "";
+        state.nodes.forEach(function (n) { n.silent = true; });
+        renderMesh(state.nodes);
+        renderNodes(state.nodes);
+      }
     });
   }
 
+  var lastSwitcherSig = "";
   function syncSwitcher(addrs) {
+    // Rebuild only when membership changes: rebuilding every poll would
+    // close an open dropdown and steal focus mid-interaction.
+    var sig = addrs.join(",");
+    if (sig === lastSwitcherSig) return;
+    lastSwitcherSig = sig;
     var sel = document.getElementById("nodeSelect");
     var cur = sel.value;
     var opts = [{ v: "", t: "serving node (" + window.location.host + ")" }].concat(
@@ -282,7 +305,11 @@
   document.getElementById("setForm").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
-    var payload = { key: f.key.value.trim(), value: f.value.value, ttl_ms: parseInt(f.ttl.value, 10) || 3600000 };
+    // Empty TTL means the 1h dashboard default; an explicit 0 means no
+    // expiry (parseInt(x)||default would silently turn 0 into 1h).
+    var rawTtl = f.ttl.value.trim();
+    var ttlMs = rawTtl === "" ? 3600000 : (parseInt(rawTtl, 10) || 0);
+    var payload = { key: f.key.value.trim(), value: f.value.value, ttl_ms: ttlMs };
     timed("/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then(function (r) {
         inspect("POST", "/set", r.status, r.ms, r.body);

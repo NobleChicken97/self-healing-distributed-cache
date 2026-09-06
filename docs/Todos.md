@@ -274,3 +274,15 @@ the console is embedded in the binary and served by the nodes at `/`.
   packets all change phase); packet presence tuned up once after review
 - [x] Pipeline green + live on shdc.noblechicken.me (run 34025272652;
   drift markup served, cluster 3/3)
+
+## Dashboard Harsh Review (2026-09-06) — browser-proven fixes
+
+- [x] Node switcher no longer rebuilds every poll (was killing focus and
+  open dropdowns); rebuilds only on membership change
+- [x] Render-skip when poll data unchanged (stops SVG/tooltip churn idle)
+- [x] Stale board greys after 2 consecutive poll failures (single blips pass)
+- [x] Ticker uses live membership count, not hardcoded /3
+- [x] Console TTL: empty means 1h default, explicit 0 means no expiry
+  (previously 0 silently became 1h)
+- [x] Cross-origin switching proven in a real browser: page on :18080,
+  switched to :18081, SET landed there (CORS path works end to end)
