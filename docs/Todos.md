@@ -262,3 +262,14 @@ the console is embedded in the binary and served by the nodes at `/`.
 - [x] Retired GitHub Pages workflow (project leaves the apex for the subdomain)
 - [ ] Pipeline green + live subdomain/DNS verification (user adds Namecheap
   A-records: `shdc` → 13.126.24.246, 13.127.78.189, 15.252.208.189)
+
+## Hero Background Drift (2026-09-06, user request)
+
+- [x] SVG backdrop layer in hero: counter-rotating orbit ellipses (110s/150s),
+  breathing dot-and-plus field (26s), 3 gossip packets on parametric orbits
+  (rAF, transform-free attribute writes, gated on visibility + tab focus)
+- [x] Still tasteful at 0.17 layer opacity; static composition reads
+  intentionally with JS off; all motion dies under prefers-reduced-motion
+- [x] Verified moving via screenshot pairs ~10-25s apart (orbits, field and
+  packets all change phase); packet presence tuned up once after review
+- [ ] Pipeline green + live check on shdc.noblechicken.me

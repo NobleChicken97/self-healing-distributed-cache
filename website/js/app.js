@@ -388,8 +388,50 @@
     });
   });
 
+  /* ---------- background drift packets (hero only, cheap by design) ----------
+     Three dots ride the backdrop orbits parametrically: transform-free SVG
+     attribute writes, rAF-throttled, paused when the tab hides, the hero
+     scrolls out, or reduced-motion is set. Without JS the static orbits +
+     dot field still read as an intentional technical illustration. */
+  function bgMotion() {
+    var layer = document.getElementById("driftPackets");
+    if (!layer || REDUCED) return;
+    var NS = "http://www.w3.org/2000/svg";
+    var orbits = [
+      { cx: 950, cy: 300, rx: 230, ry: 160, speed: 0.00011, phase: 0.0, r: 6.5, fill: "#A8562A" },
+      { cx: 950, cy: 300, rx: 160, ry: 112, speed: -0.00022, phase: 2.1, r: 5.5, fill: "#A98A2F" },
+      { cx: 180, cy: 520, rx: 200, ry: 130, speed: 0.00009, phase: 4.2, r: 5.5, fill: "#A8562A" }
+    ];
+    var dots = orbits.map(function (o) {
+      var c = document.createElementNS(NS, "circle");
+      c.setAttribute("r", o.r);
+      c.setAttribute("fill", o.fill);
+      layer.appendChild(c);
+      return c;
+    });
+    var hero = document.querySelector(".hero");
+    var onscreen = true;
+    if ("IntersectionObserver" in window && hero) {
+      new IntersectionObserver(function (entries) {
+        onscreen = entries[0].isIntersecting;
+      }, { threshold: 0 }).observe(hero);
+    }
+    function frame(t) {
+      requestAnimationFrame(frame);
+      if (document.hidden || !onscreen) return;
+      for (var i = 0; i < orbits.length; i++) {
+        var o = orbits[i];
+        var a = o.phase + t * o.speed;
+        dots[i].setAttribute("cx", (o.cx + o.rx * Math.cos(a)).toFixed(1));
+        dots[i].setAttribute("cy", (o.cy + o.ry * Math.sin(a)).toFixed(1));
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
   /* ---------- boot ---------- */
   reveals();
+  bgMotion();
   logOp("console attached to <b>" + esc(window.location.host) + "</b>");
   poll();
   state.timer = setInterval(poll, 5000);

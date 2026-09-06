@@ -41,6 +41,32 @@
 <main>
   <!-- ============ HERO ============ -->
   <section class="hero band-paper" aria-labelledby="hero-title">
+    <div class="hero-drift" aria-hidden="true">
+      <svg viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice">
+        <g class="orbit orbit-a" fill="none" stroke="currentColor">
+          <ellipse cx="950" cy="300" rx="230" ry="160"/>
+          <ellipse cx="950" cy="300" rx="160" ry="112" stroke-dasharray="2 8"/>
+          <circle cx="950" cy="300" r="3.5" fill="currentColor" stroke="none"/>
+        </g>
+        <g class="orbit orbit-b" fill="none" stroke="currentColor">
+          <ellipse cx="180" cy="520" rx="200" ry="130" stroke-dasharray="1 10"/>
+          <ellipse cx="180" cy="520" rx="120" ry="76"/>
+        </g>
+        <g class="drift-field" fill="currentColor">
+          <circle cx="620" cy="120" r="2.5"/><circle cx="720" cy="200" r="2"/>
+          <circle cx="560" cy="330" r="2.5"/><circle cx="660" cy="450" r="2"/>
+          <circle cx="820" cy="120" r="2"/><circle cx="1080" cy="200" r="2.5"/>
+          <circle cx="1050" cy="470" r="2"/><circle cx="880" cy="520" r="2.5"/>
+          <circle cx="120" cy="140" r="2"/><circle cx="300" cy="80" r="2.5"/>
+          <circle cx="420" cy="500" r="2"/><circle cx="80" cy="420" r="2.5"/>
+          <path d="M600 250h14M607 243v14" stroke="currentColor" stroke-width="2"/>
+          <path d="M760 380h14M767 373v14" stroke="currentColor" stroke-width="2"/>
+          <path d="M200 300h14M207 293v14" stroke="currentColor" stroke-width="2"/>
+          <path d="M1010 330h14M1017 323v14" stroke="currentColor" stroke-width="2"/>
+        </g>
+        <g id="driftPackets" fill="currentColor"></g>
+      </svg>
+    </div>
     <div class="wrap hero-grid">
       <div class="hero-copy">
         <p class="dateline mono">Field notes · three nodes · ap-south-1 · RF 2 · 150 vnodes</p>
