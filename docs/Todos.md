@@ -244,4 +244,6 @@ failing-then-passing unit tests. `go test ./...` green (11 pkgs) throughout.
 - [x] Quorum reads enforce majority (503) + query full member set incl.
   primary (`TestQuorumGetRequiresMajority`; fixed entry-as-replica blind spot
   caught by existing `TestQuorumWriteAndRead`)
-- [ ] Final full suite + pipeline green on merged audit fixes
+- [x] Final full suite + pipeline green on merged audit fixes
+  (run 34015278116 success; live: quorum miss -> 404, minority -> 503
+  per unit proof, healthy majority -> 200, cluster 3/3)
