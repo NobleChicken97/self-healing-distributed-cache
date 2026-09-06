@@ -275,6 +275,15 @@ the console is embedded in the binary and served by the nodes at `/`.
 - [x] Pipeline green + live on shdc.noblechicken.me (run 34025272652;
   drift markup served, cluster 3/3)
 
+## Interview Prep (2026-09-06) — guide.md for Eli Lilly SWE loop
+
+- [x] Wrote guide.md: dual simple/interview-ready explanations per topic —
+  system tour, all 19 routes + flows, stack rationale, 16 X-over-Y decisions
+  with cons, 7 STAR war stories, methodology, learnings, JD mapping,
+  differentiators, numbers sheet, technical/behavioral/CS Q&A banks,
+  questions to ask, honest limitations
+- [ ] Candidate reads guide.md cold and flags anything that doesn't parse
+
 ## Dashboard Harsh Review (2026-09-06) — browser-proven fixes
 
 - [x] Node switcher no longer rebuilds every poll (was killing focus and
