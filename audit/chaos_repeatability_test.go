@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/chaos"
+	"shdc/internal/chaos"
 )
 
 // TestChaosRepeatability runs the chaos test harness 10 times

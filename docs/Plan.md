@@ -1,4 +1,4 @@
-# Plan: Self-Healing Distributed Cache
+# Plan: SHDC
 
 ## Current status
 - Phase 0 complete: concurrent store, active TTL expiry, HTTP API, CLI client, unit tests, and decision-log entries are implemented.

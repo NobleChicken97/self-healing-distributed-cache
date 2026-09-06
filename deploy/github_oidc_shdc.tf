@@ -51,7 +51,7 @@ resource "aws_iam_role" "shdc_github_actions_ecr" {
   })
 
   tags = {
-    Project = "self-healing-distributed-cache"
+    Project = "shdc"
   }
 }
 
@@ -86,7 +86,7 @@ resource "aws_iam_policy" "shdc_ecr_push_pull" {
   })
 
   tags = {
-    Project = "self-healing-distributed-cache"
+    Project = "shdc"
   }
 }
 

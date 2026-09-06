@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"selfhealingcache/internal/ring"
+	"shdc/internal/ring"
 )
 
 // Migration represents a single key being moved from one node to another.

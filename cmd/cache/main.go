@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"selfhealingcache/internal/cluster"
-	"selfhealingcache/internal/ring"
-	"selfhealingcache/internal/server"
-	"selfhealingcache/internal/store"
+	"shdc/internal/cluster"
+	"shdc/internal/ring"
+	"shdc/internal/server"
+	"shdc/internal/store"
 )
 
 func main() {

@@ -1,12 +1,12 @@
 @echo off
-REM Demo script for Self-Healing Distributed Cache (Windows)
+REM Demo script for SHDC (Windows)
 REM This script demonstrates the self-healing capabilities of the cache cluster.
 REM
 REM Usage: demo.bat
 REM Requirements: Go 1.22+, Windows
 
 echo ========================================
-echo   Self-Healing Distributed Cache Demo
+echo   SHDC Demo
 echo ========================================
 echo.
 

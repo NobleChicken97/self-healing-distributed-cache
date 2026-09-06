@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/ring"
+	"shdc/internal/ring"
 )
 
 // TestNodeRecoveryRebalanceScenario verifies that when a node fails and then recovers,

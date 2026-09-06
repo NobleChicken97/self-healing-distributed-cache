@@ -33,7 +33,7 @@ resource "aws_lightsail_instance" "cache_node" {
   key_pair_name     = aws_lightsail_key_pair.cache_key.name
 
   tags = {
-    Project = "self-healing-cache"
+    Project = "shdc"
     Node    = "node-${count.index + 1}"
   }
 }

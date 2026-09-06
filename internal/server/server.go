@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"selfhealingcache/internal/cluster"
-	"selfhealingcache/internal/rebalance"
-	"selfhealingcache/internal/ring"
-	"selfhealingcache/internal/store"
-	"selfhealingcache/website"
+	"shdc/internal/cluster"
+	"shdc/internal/rebalance"
+	"shdc/internal/ring"
+	"shdc/internal/store"
+	"shdc/website"
 )
 
 type Server struct {

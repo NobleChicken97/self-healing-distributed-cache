@@ -1,4 +1,4 @@
-module selfhealingcache
+module shdc
 
 go 1.25.0
 

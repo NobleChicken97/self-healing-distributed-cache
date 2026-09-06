@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/cluster"
-	rb "selfhealingcache/internal/rebalance"
-	"selfhealingcache/internal/ring"
-	"selfhealingcache/internal/store"
+	"shdc/internal/cluster"
+	rb "shdc/internal/rebalance"
+	"shdc/internal/ring"
+	"shdc/internal/store"
 )
 
 // TestReplicationOnSet verifies that a write to the primary is replicated to

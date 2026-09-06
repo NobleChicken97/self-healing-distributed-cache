@@ -1,4 +1,4 @@
-# Todos: Self-Healing Distributed Cache
+# Todos: SHDC
 
 Explicit, step-by-step checklist per phase. Check items off in order within a
 phase. Do not start a phase's "decision log" item until the phase's build items
@@ -274,6 +274,23 @@ the console is embedded in the binary and served by the nodes at `/`.
   packets all change phase); packet presence tuned up once after review
 - [x] Pipeline green + live on shdc.noblechicken.me (run 34025272652;
   drift markup served, cluster 3/3)
+
+## Rename to SHDC (2026-09-06) — scope: everything except repo, ECR, live infra
+
+User decisions: GitHub repo name stays (URLs + OIDC trust untouched),
+ECR repo stays, live Lightsail names stay (no destroy/recreate).
+- [x] Go module `selfhealingcache` -> `shdc` + all 41 imports (16 files);
+  build + unit suites green on new paths
+- [x] Display names -> SHDC: README/docs titles, website title, demo
+  banners, compose comment + container/network names, doc example tags,
+  k8s example (consistent + UDP gossip ports added), systemd example
+  (convention flags, dropped unimplemented env var)
+- [x] TF `Project` tags -> `shdc` (plan: 0 add/destroy; applied clean);
+  ECR repo imported into state (was declared-but-unmanaged drift)
+- [x] Deliberately untouched: repo URL/sub, ECR name, instance/key names,
+  binary names (`cache-server`), functional IDs (`node-N` mappings),
+  historical log entries, `.commandcode` tool state
+- [ ] Pipeline green + live verify post-rename
 
 ## Interview Prep (2026-09-06) — guide.md for Eli Lilly SWE loop
 

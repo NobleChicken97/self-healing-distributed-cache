@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/ring"
-	"selfhealingcache/internal/server"
-	"selfhealingcache/internal/store"
+	"shdc/internal/ring"
+	"shdc/internal/server"
+	"shdc/internal/store"
 )
 
 // TestQuorumWriteFailsWithoutMajority verifies quorum write fails when majority unreachable

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers various deployment options for the Self-Healing Distributed Cache,
+This guide covers various deployment options for SHDC,
 from local development to production cloud deployments.
 
 ## Table of Contents
@@ -93,21 +93,20 @@ from the peer HTTP addresses automatically.
 
 ### Systemd Service (Linux)
 
-Create `/etc/systemd/system/cache-node-a.service`:
+Create `/etc/systemd/system/shdc-node-a.service`:
 
 ```ini
 [Unit]
-Description=Cache Node A
+Description=SHDC Node A
 After=network.target
 
 [Service]
 Type=simple
 User=cache
 WorkingDirectory=/opt/cache
-ExecStart=/opt/cache/cache-server -addr :8080 -id node-a -cluster-port 7946
+ExecStart=/opt/cache/cache-server -addr :8080 -id 127.0.0.1:8080 -advertise-addr 127.0.0.1:8080 -gossip-advertise-addr 127.0.0.1 -cluster-port 7946
 Restart=always
 RestartSec=5
-Environment=CACHE_LOG_LEVEL=info
 
 [Install]
 WantedBy=multi-user.target
@@ -117,8 +116,8 @@ Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable cache-node-a
-sudo systemctl start cache-node-a
+sudo systemctl enable shdc-node-a
+sudo systemctl start shdc-node-a
 ```
 
 ---
@@ -128,41 +127,44 @@ sudo systemctl start cache-node-a
 ### Build Image
 
 ```bash
-docker build -t self-healing-cache:latest .
+docker build -t shdc:latest .
 ```
 
 ### Run Single Node
 
 ```bash
 docker run -d \
-  --name cache-node \
+  --name shdc-node \
   -p 8080:8080 \
   -p 7946:7946 \
-  self-healing-cache:latest \
-  -addr :8080 -id node-1
+  shdc:latest \
+  -addr :8080 -id 127.0.0.1:8080
 ```
 
 ### Run Multi-Node Cluster with Docker Network
 
+Identity must use `host:port` on every node so rings agree (see the
+single-binary section above). Gossip uses the shared `-cluster-port` 7946.
+
 ```bash
 # Create network
-docker network create cache-net
+docker network create shdc-net
 
 # Start nodes
-docker run -d --name node-a --network cache-net \
+docker run -d --name shdc-a --network shdc-net \
   -p 8080:8080 \
-  self-healing-cache:latest \
-  -addr :8080 -id node-a
+  shdc:latest \
+  -addr :8080 -id node-a:8080 -advertise-addr node-a:8080 -gossip-advertise-addr node-a -cluster-port 7946
 
-docker run -d --name node-b --network cache-net \
+docker run -d --name shdc-b --network shdc-net \
   -p 8081:8080 \
-  self-healing-cache:latest \
-  -addr :8080 -id node-b -peers "node-a:8080"
+  shdc:latest \
+  -addr :8080 -id node-b:8080 -advertise-addr node-b:8080 -gossip-advertise-addr node-b -cluster-port 7946 -peers "node-a:8080"
 
-docker run -d --name node-c --network cache-net \
+docker run -d --name shdc-c --network shdc-net \
   -p 8082:8080 \
-  self-healing-cache:latest \
-  -addr :8080 -id node-c -peers "node-a:8080"
+  shdc:latest \
+  -addr :8080 -id node-c:8080 -advertise-addr node-c:8080 -gossip-advertise-addr node-c -cluster-port 7946 -peers "node-a:8080"
 ```
 
 ---
@@ -200,7 +202,7 @@ Create `deploy/kubernetes/` directory with the following files:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: cache-cluster
+  name: shdc-cluster
 ```
 
 #### Headless Service (for gossip protocol)
@@ -210,17 +212,21 @@ metadata:
 apiVersion: v1
 kind: Service
 metadata:
-  name: cache-headless
-  namespace: cache-cluster
+  name: shdc-headless
+  namespace: shdc-cluster
 spec:
   clusterIP: None
   selector:
-    app: cache-node
+    app: shdc-node
   ports:
     - name: http
       port: 8080
       targetPort: 8080
     - name: gossip
+      port: 7946
+      targetPort: 7946
+    - name: gossip-udp # SWIM probes run over UDP on the same port
+      protocol: UDP
       port: 7946
       targetPort: 7946
 ```
@@ -232,18 +238,18 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: cache-node
-  namespace: cache-cluster
+  name: shdc-node
+  namespace: shdc-cluster
 spec:
-  serviceName: cache-headless
+  serviceName: shdc-headless
   replicas: 3
   selector:
     matchLabels:
-      app: cache-node
+      app: shdc-node
   template:
     metadata:
       labels:
-        app: cache-node
+        app: shdc-node
     spec:
       containers:
         - name: cache
@@ -252,11 +258,11 @@ spec:
           # namespaces must agree — short names diverge the rings).
           args:
             - "-addr=:8080"
-            - "-id=$(POD_NAME).cache-headless:8080"
-            - "-advertise-addr=$(POD_NAME).cache-headless:8080"
+            - "-id=$(POD_NAME).shdc-headless:8080"
+            - "-advertise-addr=$(POD_NAME).shdc-headless:8080"
             - "-cluster-port=7946"
-            - "-gossip-advertise-addr=$(POD_NAME).cache-headless"
-            - "-peers=cache-node-0.cache-headless:8080,cache-node-1.cache-headless:8080,cache-node-2.cache-headless:8080"
+            - "-gossip-advertise-addr=$(POD_NAME).shdc-headless"
+            - "-peers=shdc-node-0.shdc-headless:8080,shdc-node-1.shdc-headless:8080,shdc-node-2.shdc-headless:8080"
           env:
             - name: POD_NAME
               valueFrom:
@@ -266,6 +272,9 @@ spec:
             - name: http
               containerPort: 8080
             - name: gossip
+              containerPort: 7946
+            - name: gossip-udp
+              protocol: UDP
               containerPort: 7946
           readinessProbe:
             httpGet:
@@ -291,12 +300,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: cache-lb
-  namespace: cache-cluster
+  name: shdc-lb
+  namespace: shdc-cluster
 spec:
   type: LoadBalancer
   selector:
-    app: cache-node
+    app: shdc-node
   ports:
     - name: http
       port: 80
@@ -310,16 +319,16 @@ spec:
 kubectl apply -f deploy/kubernetes/
 
 # Verify pods are running
-kubectl get pods -n cache-cluster -w
+kubectl get pods -n shdc-cluster -w
 
 # Check logs
-kubectl logs -n cache-cluster cache-node-0 -f
+kubectl logs -n shdc-cluster shdc-node-0 -f
 
 # Port-forward for local access
-kubectl port-forward -n cache-cluster svc/cache-lb 8080:80
+kubectl port-forward -n shdc-cluster svc/shdc-lb 8080:80
 
 # Scale the cluster
-kubectl scale statefulset cache-node -n cache-cluster --replicas=5
+kubectl scale statefulset shdc-node -n shdc-cluster --replicas=5
 ```
 
 ---
@@ -332,7 +341,7 @@ kubectl scale statefulset cache-node -n cache-cluster --replicas=5
 
 ```bash
 # Using AWS CLI to create ECS cluster
-aws ecs create-cluster --cluster-name cache-cluster
+aws ecs create-cluster --cluster-name shdc-cluster
 
 # Deploy with ECS CLI or CloudFormation
 # See: deploy/aws/ecs-service.json
@@ -342,7 +351,7 @@ aws ecs create-cluster --cluster-name cache-cluster
 
 ```bash
 # Create EKS cluster
-eksctl create cluster --name cache-cluster --nodes 3
+eksctl create cluster --name shdc-cluster --nodes 3
 
 # Deploy
 kubectl apply -f deploy/kubernetes/
@@ -353,7 +362,7 @@ kubectl apply -f deploy/kubernetes/
 ```yaml
 # deploy/aws/fargate-task.json
 {
-  "family": "cache-node",
+  "family": "shdc-node",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
@@ -377,7 +386,7 @@ kubectl apply -f deploy/kubernetes/
 
 ```bash
 # Create GKE cluster
-gcloud container clusters create cache-cluster --num-nodes=3
+gcloud container clusters create shdc-cluster --num-nodes=3
 
 # Deploy
 kubectl apply -f deploy/kubernetes/
@@ -387,7 +396,7 @@ kubectl apply -f deploy/kubernetes/
 
 ```bash
 # Deploy to Cloud Run (stateless, single node)
-gcloud run deploy cache-node \
+gcloud run deploy shdc-node \
   --image ghcr.io/yourusername/cache:latest \
   --port 8080 \
   --platform managed
@@ -399,7 +408,7 @@ gcloud run deploy cache-node \
 
 ```bash
 # Create AKS cluster
-az aks create --resource-group myRG --name cache-cluster --node-count 3
+az aks create --resource-group myRG --name shdc-cluster --node-count 3
 
 # Deploy
 kubectl apply -f deploy/kubernetes/
@@ -411,7 +420,7 @@ kubectl apply -f deploy/kubernetes/
 # Deploy container group
 az container create \
   --resource-group myRG \
-  --name cache-node \
+  --name shdc-node \
   --image yourusername/cache:latest \
   --ports 8080 7946
 ```

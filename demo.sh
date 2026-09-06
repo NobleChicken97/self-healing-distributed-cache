@@ -1,5 +1,5 @@
 #!/bin/bash
-# Demo script for Self-Healing Distributed Cache
+# Demo script for SHDC
 # This script demonstrates the self-healing capabilities of the cache cluster.
 #
 # Usage: ./demo.sh
@@ -15,7 +15,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Self-Healing Distributed Cache Demo  ${NC}"
+echo -e "${BLUE}  SHDC Demo  ${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo
 

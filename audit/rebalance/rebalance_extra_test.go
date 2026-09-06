@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"selfhealingcache/internal/rebalance"
-	"selfhealingcache/internal/ring"
+	"shdc/internal/rebalance"
+	"shdc/internal/ring"
 )
 
 // errorTransport always returns an error

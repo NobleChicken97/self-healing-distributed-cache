@@ -1,6 +1,6 @@
 # API Documentation
 
-This document describes the HTTP API endpoints for the Self-Healing Distributed Cache.
+This document describes the HTTP API endpoints for SHDC.
 
 ## Base URL
 

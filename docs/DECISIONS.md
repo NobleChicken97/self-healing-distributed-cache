@@ -1,4 +1,4 @@
-# Decision Log: Self-Healing Distributed Cache
+# Decision Log: SHDC
 
 ## Phase 0: HTTP vs raw TCP
 

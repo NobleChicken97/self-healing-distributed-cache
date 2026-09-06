@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/ring"
+	"shdc/internal/ring"
 )
 
 func TestComputeKeyMovements(t *testing.T) {

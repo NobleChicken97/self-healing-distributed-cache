@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "cache" {
   }
 
   tags = {
-    Project = "self-healing-cache"
+    Project = "shdc"
   }
 }
 

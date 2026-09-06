@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/ring"
-	"selfhealingcache/internal/store"
+	"shdc/internal/ring"
+	"shdc/internal/store"
 )
 
 // TestMultipleNodeFailures verifies the cluster survives multiple simultaneous node failures.

@@ -1,4 +1,4 @@
-# Interview Guide — Self-Healing Distributed Cache × Eli Lilly SWE
+# Interview Guide — SHDC × Eli Lilly SWE
 
 > How to use this: every topic has two versions. **Say it simple** = the idea in plain words (use when they ask "explain it to me simply" or to open an answer). **Interview-ready** = the same idea with the vocabulary, numbers, and tradeoffs that signal senior thinking. Never recite — internalize the simple version, then layer the precise terms.
 >
@@ -29,7 +29,7 @@
 
 **Say it simple:** "I built a mini-Redis that runs on three cloud servers, copies every key twice, notices within seconds when a server dies, and keeps answering from the surviving copy — then I put a live mission-control dashboard on it. The whole thing ships itself through a pipeline."
 
-**Interview-ready:** "Self-Healing Distributed Cache is a sharded, replicated, eventually-consistent key-value store in Go: consistent hashing with 150 virtual nodes, replication factor 2 with async propagation, SWIM gossip via hashicorp/memberlist for failure detection, server-side request routing with replica failover, absolute-timestamp TTL replication, and an opt-in quorum mode. It deploys rolling to three AWS Lightsail nodes through a GitHub Actions → ECR pipeline with OIDC auth, health gates, and smoke tests, and each node serves an embedded live operations dashboard."
+**Interview-ready:** "SHDC is a sharded, replicated, eventually-consistent key-value store in Go: consistent hashing with 150 virtual nodes, replication factor 2 with async propagation, SWIM gossip via hashicorp/memberlist for failure detection, server-side request routing with replica failover, absolute-timestamp TTL replication, and an opt-in quorum mode. It deploys rolling to three AWS Lightsail nodes through a GitHub Actions → ECR pipeline with OIDC auth, health gates, and smoke tests, and each node serves an embedded live operations dashboard."
 
 *Lilly trait proved: can compress complexity without losing accuracy — the core of good stakeholder communication.*
 

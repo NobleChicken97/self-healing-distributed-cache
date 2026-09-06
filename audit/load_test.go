@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"selfhealingcache/internal/ring"
-	"selfhealingcache/internal/server"
-	"selfhealingcache/internal/store"
+	"shdc/internal/ring"
+	"shdc/internal/server"
+	"shdc/internal/store"
 )
 
 // TestStoreThroughput measures the throughput of basic store operations.

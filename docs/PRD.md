@@ -1,4 +1,4 @@
-# PRD: Self-Healing Distributed Cache
+# PRD: SHDC
 
 ## 1. Summary
 Build a distributed, in-memory key-value cache from scratch that shards data across

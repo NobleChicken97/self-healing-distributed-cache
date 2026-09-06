@@ -1,4 +1,4 @@
-# Self-Healing Distributed Cache - Local Development Cluster
+# SHDC - Local Development Cluster
 # Usage:
 #   docker-compose up -d          # Start 3-node cluster
 #   docker-compose logs -f node-a # View logs
@@ -15,7 +15,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cache-node-a
+    container_name: shdc-node-a
     # IDs double as ring/gossip identity: every node must use the same
     # "host:port" naming so rings agree and liveness checks match.
     command: ["-addr", ":8080", "-id", "node-a:8080", "-advertise-addr", "node-a:8080", "-cluster-port", "7946", "-gossip-advertise-addr", "node-a"]
@@ -23,39 +23,39 @@ services:
       - "8080:8080"  # HTTP API
       - "7946:7946"  # Gossip protocol
     networks:
-      - cache-net
+      - shdc-net
     restart: unless-stopped
 
   node-b:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cache-node-b
+    container_name: shdc-node-b
     command: ["-addr", ":8080", "-id", "node-b:8080", "-advertise-addr", "node-b:8080", "-peers", "node-a:8080", "-cluster-port", "7946", "-gossip-advertise-addr", "node-b"]
     ports:
       - "8081:8080"  # HTTP API
     depends_on:
       - node-a
     networks:
-      - cache-net
+      - shdc-net
     restart: unless-stopped
 
   node-c:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cache-node-c
+    container_name: shdc-node-c
     command: ["-addr", ":8080", "-id", "node-c:8080", "-advertise-addr", "node-c:8080", "-peers", "node-a:8080", "-cluster-port", "7946", "-gossip-advertise-addr", "node-c"]
     ports:
       - "8082:8080"  # HTTP API
     depends_on:
       - node-a
     networks:
-      - cache-net
+      - shdc-net
     restart: unless-stopped
 
 networks:
-  cache-net:
+  shdc-net:
     driver: bridge
     ipam:
       config:

@@ -1,4 +1,4 @@
-# Self-Healing Distributed Cache
+# SHDC
 
 A distributed, in-memory key-value cache built from scratch in Go that shards data
 across multiple independent nodes, replicates keys for fault tolerance, detects node
@@ -217,6 +217,8 @@ All 11 test packages pass (verified with Go 1.25):
 - Recovery tests: node failure and rejoin scenarios
 
 **Note:** Race detector (`-race`) requires a 64-bit GCC toolchain which may not be available on all Windows setups. Run `go test ./... -count=1` to verify.
+
+**Note (Windows):** the audit suite opens thousands of loopback connections; Windows holds them in `TIME_WAIT` for ~2 minutes out of a ~16k ephemeral-port pool. Back-to-back full-suite runs can fail with `connectex: Only one usage of each socket address` — that is OS socket exhaustion, not a code regression. Space full runs a few minutes apart (or check with `netstat -ano -p TCP | Select-String TIME_WAIT | Measure-Object`). Linux CI is unaffected and authoritative.
 
 ## Demo
 
