@@ -1,8 +1,17 @@
 package main
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
+
+	"selfhealingcache/internal/ring"
+	"selfhealingcache/internal/server"
+	"selfhealingcache/internal/store"
 )
 
 func TestGossipBindAddr(t *testing.T) {
@@ -54,5 +63,50 @@ func TestPeersToGossipPeers(t *testing.T) {
 				t.Errorf("peersToGossipPeers(%q, %d, %v) = %v, want %v", tt.peers, tt.gossipPort, tt.useDefault, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestDashboardServes verifies the embedded operations dashboard is served
+// at / with API routes keeping precedence (a GET on /set must answer 405
+// from the API, not 404 from the file server).
+func TestDashboardServes(t *testing.T) {
+	st := store.New(time.Second)
+	defer st.Close()
+	r := ring.New(10)
+	r.AddNode(ring.Node{ID: "node-a", Addr: "127.0.0.1:19301"})
+	srv := server.New(st, "node-a", r)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	get := func(path string) (int, string, string) {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, resp.Header.Get("Content-Type"), string(body)
+	}
+
+	code, ctype, body := get("/")
+	if code != http.StatusOK || !strings.Contains(ctype, "text/html") {
+		t.Fatalf("/ -> %d %q, want 200 text/html", code, ctype)
+	}
+	for _, want := range []string{"SHDC", "/css/style.css", "/js/app.js", "id=\"meshSvg\""} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("/ missing %q", want)
+		}
+	}
+	if code, _, _ := get("/css/style.css"); code != http.StatusOK {
+		t.Fatalf("/css/style.css -> %d, want 200", code)
+	}
+	if code, _, _ := get("/js/app.js"); code != http.StatusOK {
+		t.Fatalf("/js/app.js -> %d, want 200", code)
+	}
+	if code, _, _ := get("/no-such-dashboard-page"); code != http.StatusNotFound {
+		t.Fatalf("unknown path -> %d, want 404", code)
+	}
+	if code, _, _ := get("/set"); code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /set -> %d, want 405 from API (route precedence)", code)
 	}
 }

@@ -247,3 +247,18 @@ failing-then-passing unit tests. `go test ./...` green (11 pkgs) throughout.
 - [x] Final full suite + pipeline green on merged audit fixes
   (run 34015278116 success; live: quorum miss -> 404, minority -> 503
   per unit proof, healthy majority -> 200, cluster 3/3)
+
+## Functional Dashboard (2026-09-06) — shdc.noblechicken.me
+
+Same-origin by design: an HTTPS page cannot call the HTTP-only cluster, so
+the console is embedded in the binary and served by the nodes at `/`.
+- [x] `website/website.go` go:embed + `/` file route (API keeps precedence)
+  + permissive CORS for node switching (no-auth API: grants nothing new)
+- [x] Editorial dashboard: live mesh SVG, ledger console, quorum + TTL labs,
+  telemetry, ops log, endpoint wiring docs; anime.js guarded, reduced-motion
+  respected, contrast-checked, no-JS copy intact
+- [x] Browser-verified: layout screenshots reviewed, real form submit lands
+  in cluster; `TestDashboardServes` guards routes in CI
+- [x] Retired GitHub Pages workflow (project leaves the apex for the subdomain)
+- [ ] Pipeline green + live subdomain/DNS verification (user adds Namecheap
+  A-records: `shdc` → 13.126.24.246, 13.127.78.189, 15.252.208.189)

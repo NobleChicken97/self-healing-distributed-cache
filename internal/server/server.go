@@ -17,6 +17,7 @@ import (
 	"selfhealingcache/internal/rebalance"
 	"selfhealingcache/internal/ring"
 	"selfhealingcache/internal/store"
+	"selfhealingcache/website"
 )
 
 type Server struct {
@@ -245,7 +246,29 @@ func (s *Server) Handler() http.Handler {
 	// Health and metrics endpoints
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/metrics", s.handleMetrics)
-	return mux
+	// Operations dashboard (embedded static files). Registered last: Go's
+	// mux prefers longer patterns, so every /set, /get, /health, … route
+	// above keeps precedence and only unmatched paths reach the files.
+	mux.Handle("/", website.Handler())
+	return corsMiddleware(mux)
+}
+
+// corsMiddleware lets browser dashboards on other origins (node switcher,
+// local dev, future static hosting) call this no-auth cluster API. This
+// grants nothing curl doesn't already have: no credentials or secrets exist
+// anywhere in the API. Preflight requests are answered directly.
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // getOrCreateRebalancer returns the existing rebalancer or creates one thread-safely.
