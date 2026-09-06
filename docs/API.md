@@ -75,8 +75,9 @@ Retrieve a value by key.
 - Routes to the primary node for the key
 - Falls back to replica if primary is dead
 - If the primary is alive but no longer has the key (e.g. it restarted with
-  an empty store), replicas are consulted before 404 — genuinely absent keys
-  cost replica probes, which is the documented availability tradeoff
+  an empty store), replicas are consulted before 404, and the replica's copy
+  (with its exact expiry) is written back locally to restore redundancy.
+  Genuinely absent keys cost replica probes, which is the documented tradeoff
 - Returns 404 if key doesn't exist or has expired
 
 ---

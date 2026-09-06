@@ -33,6 +33,15 @@ terraform apply
 terraform output
 ```
 
+### Terraform State
+
+State is local (`terraform.tfstate`, gitignored) by deliberate decision
+(2026-09-06): no shared backend, no extra AWS resources, no impact on other
+projects. Consequence: run all `terraform` commands from the machine holding
+the state file, back it up before risky operations, and never run concurrent
+applies. Migrating to an S3 backend later is straightforward
+(`terraform init -migrate-state`) if collaboration needs it.
+
 ## After Deployment
 
 ### Test the cluster:

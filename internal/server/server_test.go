@@ -667,6 +667,21 @@ func TestPrimaryMissFallsBackToReplica(t *testing.T) {
 		t.Fatalf("unexpected body: %s", string(body))
 	}
 
+	// The read must have healed the primary asynchronously: poll its store
+	// until the key lands (best-effort heal, so allow time).
+	healed := false
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if got, err := storeA.Get(testKey); err == nil && got == "surviving-value" {
+			healed = true
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !healed {
+		t.Fatal("primary was not healed after fallback read")
+	}
+
 	// A genuinely absent key must still 404 (fallback finds nothing).
 	resp, err = http.Get(tsA.URL + "/get?key=never-existed-" + testKey)
 	if err != nil {
@@ -675,6 +690,45 @@ func TestPrimaryMissFallsBackToReplica(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404 for absent key, got %d", resp.StatusCode)
+	}
+}
+
+// TestPendingReplicationAgesOut verifies that replication failures tracked
+// longer than maxPendingAge are dropped (bounding pendingRepls memory for
+// permanently dead peers) while recent failures keep being retried.
+func TestPendingReplicationAgesOut(t *testing.T) {
+	st := store.New(time.Second)
+	defer st.Close()
+
+	r := ring.New(10)
+	r.AddNode(ring.Node{ID: "node-a", Addr: "127.0.0.1:19101"})
+	r.AddNode(ring.Node{ID: "dead-replica", Addr: "127.0.0.1:9"}) // nothing listens: refused fast
+
+	srv := New(st, "node-a", r)
+	srv.retryInterval = time.Millisecond
+	srv.maxPendingAge = 100 * time.Millisecond
+
+	st.Set("old-key", "v", 0)
+	st.Set("young-key", "v", 0)
+	srv.trackFailedReplication("old-key", "dead-replica")
+	srv.trackFailedReplication("young-key", "dead-replica")
+
+	// Backdate old-key beyond maxPendingAge.
+	srv.replMu.Lock()
+	srv.pendingRepls["old-key"]["dead-replica"] = time.Now().Add(-time.Hour)
+	srv.replMu.Unlock()
+
+	srv.retryFailedReplications()
+
+	srv.replMu.Lock()
+	_, oldStill := srv.pendingRepls["old-key"]
+	_, youngStill := srv.pendingRepls["young-key"]
+	srv.replMu.Unlock()
+	if oldStill {
+		t.Fatal("aged-out pending entry was not dropped")
+	}
+	if !youngStill {
+		t.Fatal("recent pending entry should still be tracked")
 	}
 }
 

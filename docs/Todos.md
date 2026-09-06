@@ -238,4 +238,7 @@ failing-then-passing unit tests. `go test ./...` green (11 pkgs) throughout.
 - [x] Docs synced: README (quick-start, CI/CD reality, limitations),
   API.md (GET fallback, quorum 503), DEPLOYMENT.md (flags, env, k8s,
   monitoring), DECISIONS.md (hardening entry), CI_CD_SETUP.md
+- [x] Follow-ups fixed: async read healing (`entry_count` 0 → 3 live,
+  `TestPrimaryMissFallsBackToReplica` extended), bounded retry tracking
+  (`maxPendingAge`, `TestPendingReplicationAgesOut`, dead fields removed)
 - [ ] Final full suite + pipeline green on merged audit fixes

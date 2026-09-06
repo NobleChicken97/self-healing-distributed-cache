@@ -54,7 +54,9 @@ failures automatically via gossip, and rebalances data with zero downtime.
 2. Node checks hash ring to find the key's primary owner
 3. If this node is the primary: serve locally, replicate asynchronously
 4. If the primary's store no longer has the key (e.g. it restarted empty),
-   consult replicas before answering 404 — genuine misses cost replica probes
+   consult replicas before answering 404 — and heal asynchronously by writing
+   the replica's copy (with its exact expiry) back locally, restoring
+   redundancy without slowing the read. Genuine misses cost replica probes
 5. If another node is primary: forward request (transparent to client)
 6. If primary is dead: route to replica using health-aware failover
 
@@ -91,7 +93,10 @@ Failed replications are automatically retried:
 1. If a replica is unreachable, the failure is tracked per replica
 2. A background goroutine retries every 5 seconds until the replica
    acknowledges (entries clear automatically if the key expires or is deleted)
-3. Successful retry removes the key from the pending queue
+3. Entries failing longer than 24 hours are dropped with a warning, bounding
+   tracking memory for permanently dead peers (the key stays
+   under-replicated until its next write)
+4. Successful retry removes the key from the pending queue
 
 ## Quick Start
 
@@ -284,8 +289,8 @@ design decision including:
 ## Limitations
 
 - No persistence (in-memory only) — a restarted node serves its primaries'
-  keys from replicas until they are rewritten; genuinely absent keys cost
-  replica probes before 404
+  keys from replicas and heals asynchronously on read; genuinely absent keys
+  cost replica probes before 404
 - Ring membership is static (built from startup flags) — gossip tracks
   liveness for failover, but the ring itself is only changed by redeploying
   with new flags; `POST /rebalance` drives migration for operator-led moves

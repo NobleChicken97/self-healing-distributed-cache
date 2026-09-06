@@ -32,23 +32,17 @@ type Server struct {
 	rebalancerMu      sync.Mutex // protects rebalancer field
 
 	// replication tracking for graceful shutdown
-	replWg        sync.WaitGroup
-	replStop      chan struct{}
-	replMu        sync.Mutex
-	pendingRepls  map[string]map[string]time.Time // key -> (replicaID -> first failed time)
-	maxRetries    int
+	replWg       sync.WaitGroup
+	replStop     chan struct{}
+	replMu       sync.Mutex
+	pendingRepls map[string]map[string]time.Time // key -> (replicaID -> first failed time)
+	// maxPendingAge bounds pendingRepls memory: entries failing longer than
+	// this are dropped with a warning (the key stays under-replicated until
+	// its next write). Without a bound, a permanently dead peer plus steady
+	// writes grows the map forever.
+	maxPendingAge time.Duration
 	retryInterval time.Duration
 	retryDone     chan struct{}
-}
-
-// pendingReplication tracks a failed replication for retry.
-type pendingReplication struct {
-	key       string
-	value     string
-	expiresAt time.Time
-	version   int64
-	failCount int
-	firstFail time.Time
 }
 
 // New creates a server with ring-based routing and replication.
@@ -60,7 +54,7 @@ func New(s *store.Store, nodeID string, r *ring.Ring) *Server {
 		transport:         newOutboundTransport(3*time.Second, 5*time.Second),
 		replicationFactor: 2,
 		logger:            log.Default(),
-		maxRetries:        3,
+		maxPendingAge:     24 * time.Hour,
 		retryInterval:     5 * time.Second,
 		pendingRepls:      make(map[string]map[string]time.Time),
 		replStop:          make(chan struct{}),
@@ -120,7 +114,20 @@ func (s *Server) retryFailedReplications() {
 	var targets []retryTarget
 	for key, replicas := range s.pendingRepls {
 		for replicaID, firstFail := range replicas {
-			if time.Since(firstFail) >= s.retryInterval {
+			age := time.Since(firstFail)
+			if age >= s.maxPendingAge {
+				// Give up: bound pendingRepls memory for permanently dead
+				// peers. The key stays under-replicated until its next
+				// write; the warning preserves observability.
+				s.logger.Printf("[REPLICATION] giving up key=%s to replica=%s after %v without ack",
+					key, replicaID, age.Round(time.Second))
+				delete(replicas, replicaID)
+				if len(replicas) == 0 {
+					delete(s.pendingRepls, key)
+				}
+				continue
+			}
+			if age >= s.retryInterval {
 				targets = append(targets, retryTarget{key, replicaID, firstFail})
 			}
 		}
@@ -363,8 +370,14 @@ func (s *Server) handleRebalancePull(w http.ResponseWriter, r *http.Request) {
 		// still hold the key (rolling deploys wipe in-memory state). Consult
 		// replicas before reporting 404 — a miss here costs extra probes per
 		// genuinely-absent key, which is the documented tradeoff.
-		if v, ok := s.readFromReplica(key); ok {
+		if v, expiresAt, ok := s.readFromReplica(key); ok {
 			writeJSON(w, http.StatusOK, map[string]string{"key": key, "value": v})
+			// Heal asynchronously: restore local redundancy without slowing
+			// the read. Best-effort (may be dropped at shutdown): the next
+			// read retries. Uses the replica's absolute expiry so TTL stays
+			// exact, and writes store-direct so it does NOT fan back out as
+			// a new replication.
+			go s.store.SetWithExpiry(key, v, expiresAt)
 			return
 		}
 		writeError(w, http.StatusNotFound, "key not found")
@@ -774,10 +787,16 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, store.ErrNotFound) {
 		// The primary may have restarted with an empty store while replicas
 		// still hold the key (rolling deploys wipe in-memory state). Consult
-		// replicas before reporting 404 — a miss here costs one extra probe
-		// per genuinely-absent key, which is the documented tradeoff.
-		if v, ok := s.readFromReplica(key); ok {
+		// replicas before reporting 404 — a miss here costs extra probes per
+		// genuinely-absent key, which is the documented tradeoff.
+		if v, expiresAt, ok := s.readFromReplica(key); ok {
 			writeJSON(w, http.StatusOK, map[string]string{"key": key, "value": v})
+			// Heal asynchronously: restore local redundancy without slowing
+			// the read. Best-effort (may be dropped at shutdown): the next
+			// read retries. Uses the replica's absolute expiry so TTL stays
+			// exact, and writes store-direct so it does NOT fan back out as
+			// a new replication.
+			go s.store.SetWithExpiry(key, v, expiresAt)
 			return
 		}
 		writeError(w, http.StatusNotFound, "key not found")
@@ -794,7 +813,8 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 // the key but no longer has it locally (e.g. after a restart wiped its
 // in-memory store while replicas retained the data). It uses /replica/get so
 // the replica serves its local copy directly instead of forwarding back here.
-func (s *Server) readFromReplica(key string) (string, bool) {
+// Returns value, absolute expiry, and whether a replica had the key.
+func (s *Server) readFromReplica(key string) (string, time.Time, bool) {
 	replicas := s.ring.Replicas(key, s.replicationFactor)
 	aliveReplicas, deadReplicas := splitByAlive(s, replicas)
 	for _, replica := range append(aliveReplicas, deadReplicas...) {
@@ -816,14 +836,19 @@ func (s *Server) readFromReplica(key string) (string, bool) {
 			continue
 		}
 		var out struct {
-			Value string `json:"value"`
+			Value     string `json:"value"`
+			ExpiresAt int64  `json:"expires_at_ms"`
 		}
 		if err := json.Unmarshal(body, &out); err != nil {
 			continue
 		}
-		return out.Value, true
+		expiresAt := time.Time{}
+		if out.ExpiresAt > 0 {
+			expiresAt = time.UnixMilli(out.ExpiresAt)
+		}
+		return out.Value, expiresAt, true
 	}
-	return "", false
+	return "", time.Time{}, false
 }
 
 // forwardWithFallback tries the primary node first; if unreachable, falls back
