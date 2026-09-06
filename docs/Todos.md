@@ -272,4 +272,5 @@ the console is embedded in the binary and served by the nodes at `/`.
   intentionally with JS off; all motion dies under prefers-reduced-motion
 - [x] Verified moving via screenshot pairs ~10-25s apart (orbits, field and
   packets all change phase); packet presence tuned up once after review
-- [ ] Pipeline green + live check on shdc.noblechicken.me
+- [x] Pipeline green + live on shdc.noblechicken.me (run 34025272652;
+  drift markup served, cluster 3/3)
