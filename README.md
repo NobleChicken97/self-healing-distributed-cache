@@ -53,8 +53,10 @@ failures automatically via gossip, and rebalances data with zero downtime.
 1. Client sends request to any node
 2. Node checks hash ring to find the key's primary owner
 3. If this node is the primary: serve locally, replicate asynchronously
-4. If another node is primary: forward request (transparent to client)
-5. If primary is dead: route to replica using health-aware failover
+4. If the primary's store no longer has the key (e.g. it restarted empty),
+   consult replicas before answering 404 — genuine misses cost replica probes
+5. If another node is primary: forward request (transparent to client)
+6. If primary is dead: route to replica using health-aware failover
 
 ### Replication Path
 
@@ -86,10 +88,10 @@ When a node failure is detected via SWIM gossip, the cluster automatically trigg
 
 Failed replications are automatically retried:
 
-1. If replica is unreachable, the failure is tracked
-2. A background goroutine retries every 5 seconds
-3. Up to 3 retry attempts per failed key
-4. Successful retry removes key from pending queue
+1. If a replica is unreachable, the failure is tracked per replica
+2. A background goroutine retries every 5 seconds until the replica
+   acknowledges (entries clear automatically if the key expires or is deleted)
+3. Successful retry removes the key from the pending queue
 
 ## Quick Start
 
@@ -110,14 +112,20 @@ Open three terminals and run:
 
 ```bash
 # Terminal 1: Seed node
-go run ./cmd/cache -addr :8080 -id node-a
+go run ./cmd/cache -addr :8080 -id 127.0.0.1:8080 -advertise-addr 127.0.0.1:8080 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8081,127.0.0.1:8082"
 
 # Terminal 2: Join via node-a
-go run ./cmd/cache -addr :8081 -id node-b -peers ":8080"
+go run ./cmd/cache -addr :8081 -id 127.0.0.1:8081 -advertise-addr 127.0.0.1:8081 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8082"
 
 # Terminal 3: Join via node-a
-go run ./cmd/cache -addr :8082 -id node-c -peers ":8080"
+go run ./cmd/cache -addr :8082 -id 127.0.0.1:8082 -advertise-addr 127.0.0.1:8082 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8081"
 ```
+
+Identity must use `host:port` everywhere (not short names like `node-a`):
+every node builds its ring from the same ID set, and gossip liveness is
+checked against those IDs — mismatched naming diverges the rings and breaks
+routing. `-gossip-advertise-addr` is required whenever the gossip bind address
+isn't directly dialable by peers (Docker, multi-host).
 
 ### CLI Client Usage
 
@@ -275,31 +283,35 @@ design decision including:
 
 ## Limitations
 
-- No persistence (in-memory only)
+- No persistence (in-memory only) — a restarted node serves its primaries'
+  keys from replicas until they are rewritten; genuinely absent keys cost
+  replica probes before 404
+- Ring membership is static (built from startup flags) — gossip tracks
+  liveness for failover, but the ring itself is only changed by redeploying
+  with new flags; `POST /rebalance` drives migration for operator-led moves
+- Quorum reads require a real majority (503 otherwise) — stronger consistency,
+  lower availability, exactly as documented for the opt-in mode
 - No authentication or encryption
 - Single data center (no multi-region)
 - Best-effort replication with retry (small window for data loss on primary failure)
 
 ## CI/CD
 
-This project uses GitHub Actions for continuous integration and delivery:
-
-### Continuous Integration (`.github/workflows/ci.yml`)
+This project uses a single GitHub Actions workflow (`.github/workflows/pipeline.yml`)
+for continuous integration and delivery:
 
 - **Linting**: `gofmt` and `go vet` checks
-- **Testing**: Runs on Ubuntu, Windows, and macOS
-- **Race Detection**: Tests run with `-race` flag
+- **Testing**: Runs on Ubuntu, Windows, and macOS, plus integration/stress suites
 - **Coverage**: Coverage reports generated on Ubuntu
 - **Multi-platform Builds**: Linux (AMD64, ARM64), macOS (AMD64, ARM64), Windows (AMD64)
-- **Docker Build**: Builds and tests Docker image
+- **Docker Build & Push**: Builds and pushes to Amazon ECR via OIDC
+  (`shdc-github-actions-ecr` role, no long-lived AWS keys)
+- **Deploy**: Rolling deploy to 3 AWS Lightsail nodes with health checks,
+  cluster-membership verification, and CRUD + performance smoke tests
+- **Release**: On version tags (`v*`), binaries are archived into a GitHub Release
 
-### Release Automation (`.github/workflows/release.yml`)
-
-Triggered on version tags (`v*`):
-
-- Builds release binaries for all platforms
-- Creates GitHub Release with artifacts
-- Builds and pushes Docker image to GitHub Container Registry
+> Note: `go test -race` is not run in CI (it needs a 64-bit GCC toolchain unavailable
+> on some runners). Run `go test ./... -count=1` locally to verify.
 
 ### Create a Release
 
@@ -319,7 +331,8 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for comprehensive deployment option
 - **Single Binary**: Simple deployment for edge computing
 - **Docker**: Containerized deployment
 - **Kubernetes**: Production orchestration with StatefulSets
-- **Cloud**: AWS (ECS/EKS/Fargana), GCP (GKE/Cloud Run), Azure (AKS/ACI)
+- **Cloud**: AWS (Lightsail via Terraform + GitHub Actions; see `deploy/`), with
+  Kubernetes manifests documented in `docs/DEPLOYMENT.md` for EKS/GKE/AKS
 
 ### Quick Docker Deploy
 

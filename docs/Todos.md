@@ -219,3 +219,23 @@ but both IAM roles only trusted the legacy format. Proven via CloudTrail + `gh a
   (the last fails without its fix — verified via stash)
 - [x] Full Pipeline green incl. CRUD + perf smoke tests on Lightsail
   (run 33969546547: all stages success; live `alive_nodes: 3`, identical rings)
+
+## Harsh-Critic Audit (2026-09-05) — black-box battery + static analysis
+
+Evidence first: every fix below was proven live (local 3-node battery) or by
+failing-then-passing unit tests. `go test ./...` green (11 pkgs) throughout.
+- [x] Static gates: gofmt/vet clean (also fixed an em-dash mojibake scare —
+  verified byte-level it was a display artifact; repo encoding audit passed)
+- [x] Live battery: 30 keys × 3 nodes CRUD, edge cases (400/404/405 shapes),
+  TTL expiry on all nodes, quorum round-trip, 300-key distribution even
+- [x] Proven live: dead-primary failover 20/20; empty-restart 404 hole
+  (rk-11/16/17 cluster-wide 404 with data on replica) → fixed via
+  primary-miss replica fallback → re-proven 20/20/20
+- [x] Fixed: metrics map race, unbounded outbound HTTP, quorum majority +
+  status/body-close, `-mem-cap` runtime wiring, dead `updatedAt`, stale
+  `CACHE_*` env docs, compose healthchecks/flags/monitoring, all deploy
+  scripts + k8s example to IP:port identity, demo.sh/bat convention
+- [x] Docs synced: README (quick-start, CI/CD reality, limitations),
+  API.md (GET fallback, quorum 503), DEPLOYMENT.md (flags, env, k8s,
+  monitoring), DECISIONS.md (hardening entry), CI_CD_SETUP.md
+- [ ] Final full suite + pipeline green on merged audit fixes

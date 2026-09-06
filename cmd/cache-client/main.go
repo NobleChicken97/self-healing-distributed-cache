@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 )
 
 func main() {
@@ -18,12 +19,14 @@ func main() {
 	key := flag.String("key", "", "cache key")
 	value := flag.String("value", "", "value for set")
 	ttlMS := flag.Int64("ttl-ms", 0, "TTL in milliseconds for set; zero means no expiry")
+	timeout := flag.Duration("timeout", 15*time.Second, "HTTP request timeout")
 	flag.Parse()
 
 	if *key == "" {
 		fail("-key is required")
 	}
 
+	client := &http.Client{Timeout: *timeout}
 	var resp *http.Response
 	var err error
 	switch *command {
@@ -32,15 +35,15 @@ func main() {
 		if marshalErr != nil {
 			fail(marshalErr.Error())
 		}
-		resp, err = http.Post(*baseURL+"/set", "application/json", bytes.NewReader(body))
+		resp, err = client.Post(*baseURL+"/set", "application/json", bytes.NewReader(body))
 	case "get":
-		resp, err = http.Get(*baseURL + "/get?key=" + url.QueryEscape(*key))
+		resp, err = client.Get(*baseURL + "/get?key=" + url.QueryEscape(*key))
 	case "delete":
 		req, requestErr := http.NewRequest(http.MethodDelete, *baseURL+"/delete?key="+url.QueryEscape(*key), nil)
 		if requestErr != nil {
 			fail(requestErr.Error())
 		}
-		resp, err = http.DefaultClient.Do(req)
+		resp, err = client.Do(req)
 	default:
 		fail("-command must be set, get, or delete")
 	}

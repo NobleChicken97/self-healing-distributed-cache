@@ -33,33 +33,42 @@ sudo git clone https://github.com/NobleChicken97/self-healing-distributed-cache.
 cd cache
 sudo docker build -t cache-server:latest .
 
-# Determine peers based on node ID
+# Determine peers and identity based on node ID.
+# Node identity uses IP:port everywhere so ring, gossip, and liveness checks
+# all agree (see pipeline.yml deploy job for the canonical flag set).
 if [ -z "$PEERS" ]; then
   case $NODE_ID in
     node-1)
+      SELF_IP="${NODE1_IP:-13.126.24.246}"
       PEERS="${NODE2_IP:-13.127.78.189:8080},${NODE3_IP:-15.252.208.189:8080}"
       ;;
     node-2)
+      SELF_IP="${NODE2_IP:-13.127.78.189}"
       PEERS="${NODE1_IP:-13.126.24.246:8080},${NODE3_IP:-15.252.208.189:8080}"
       ;;
     node-3)
+      SELF_IP="${NODE3_IP:-15.252.208.189}"
       PEERS="${NODE1_IP:-13.126.24.246:8080},${NODE2_IP:-13.127.78.189:8080}"
       ;;
   esac
 fi
+SELF_IP="${SELF_IP:-127.0.0.1}"
 
-# Run cache server
+# Run cache server (host networking: SWIM UDP probes must not traverse
+# Docker bridge NAT)
 echo "Starting cache server..."
 echo "Peers: $PEERS"
 
 sudo docker run -d \
   --name cache-server \
   --restart always \
-  -p 8080:8080 \
-  -p 7946:7946 \
+  --network host \
   cache-server:latest \
   -addr :8080 \
-  -id $NODE_ID \
+  -cluster-port 7946 \
+  -gossip-advertise-addr "$SELF_IP" \
+  -id "${SELF_IP}:8080" \
+  -advertise-addr "${SELF_IP}:8080" \
   -peers "$PEERS"
 
 echo "=== $NODE_ID setup complete ==="

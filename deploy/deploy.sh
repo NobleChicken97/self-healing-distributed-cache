@@ -31,11 +31,15 @@ deploy_node() {
   echo ""
   echo "=== Deploying to ${NODE_ID} (${NODE_IP}) ==="
 
+  # Mint the ECR token LOCALLY: nodes use the shared AmazonLightsailInstanceRole
+  # which has no ECR rights (and must stay that way — other projects share it).
+  ECR_TOKEN=$(aws ecr get-login-password --region ${AWS_REGION})
+
   ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${SSH_USER}@${NODE_IP}" << EOF
     set -e
 
-    # Login to ECR
-    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+    # Login to ECR with the runner-minted token (masked below via env)
+    echo "${ECR_TOKEN}" | docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
     # Pull new image
     docker pull ${FULL_IMAGE}
@@ -44,15 +48,18 @@ deploy_node() {
     docker stop cache-server 2>/dev/null || true
     docker rm cache-server 2>/dev/null || true
 
-    # Run new container
+    # Run new container (host networking: SWIM UDP probes must not traverse
+    # Docker bridge NAT; node identity uses IP:port so rings agree everywhere)
     docker run -d \
       --name cache-server \
       --restart always \
-      -p 8080:8080 \
-      -p 7946:7946 \
+      --network host \
       ${FULL_IMAGE} \
       -addr :8080 \
+      -cluster-port 7946 \
+      -gossip-advertise-addr ${NODE_IP} \
       -id ${NODE_ID} \
+      -advertise-addr ${NODE_ID} \
       -peers "${PEERS}"
 
     # Verify
@@ -65,10 +72,10 @@ deploy_node() {
 EOF
 }
 
-# Deploy to all nodes
-deploy_node "$NODE1_IP" "node-1" "${NODE2_IP}:8080,${NODE3_IP}:8080"
-deploy_node "$NODE2_IP" "node-2" "${NODE1_IP}:8080,${NODE3_IP}:8080"
-deploy_node "$NODE3_IP" "node-3" "${NODE1_IP}:8080,${NODE2_IP}:8080"
+# Deploy to all nodes (IDs are IP:port so ring, gossip, and liveness agree)
+deploy_node "$NODE1_IP" "${NODE1_IP}:8080" "${NODE2_IP}:8080,${NODE3_IP}:8080"
+deploy_node "$NODE2_IP" "${NODE2_IP}:8080" "${NODE1_IP}:8080,${NODE3_IP}:8080"
+deploy_node "$NODE3_IP" "${NODE3_IP}:8080" "${NODE1_IP}:8080,${NODE2_IP}:8080"
 
 echo ""
 echo "=== Deployment complete! ==="

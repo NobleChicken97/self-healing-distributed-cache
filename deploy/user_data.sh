@@ -29,15 +29,18 @@ git clone https://github.com/NobleChicken97/self-healing-distributed-cache.git c
 cd cache
 docker build -t cache-server .
 
-# Determine peers based on node ID
+# Determine peers and own IP based on node ID
 case $NODE_ID in
   node-1)
+    SELF_IP="$NODE1_IP"
     PEERS="$NODE2_IP:8080,$NODE3_IP:8080"
     ;;
   node-2)
+    SELF_IP="$NODE2_IP"
     PEERS="$NODE1_IP:8080,$NODE3_IP:8080"
     ;;
   node-3)
+    SELF_IP="$NODE3_IP"
     PEERS="$NODE1_IP:8080,$NODE2_IP:8080"
     ;;
   *)
@@ -45,15 +48,22 @@ case $NODE_ID in
     ;;
 esac
 
-# Run cache server
+# NOTE: Terraform does not attach this script to the Lightsail instances
+# (see main.tf); the GitHub Actions pipeline is the canonical deploy path.
+# Kept as a manual fallback — flag set mirrors pipeline.yml.
+
+# Run cache server (host networking: SWIM UDP probes must not traverse
+# Docker bridge NAT; IP:port identity keeps ring/gossip/liveness in sync)
 docker run -d \
   --name cache-server \
   --restart always \
-  -p 8080:8080 \
-  -p 7946:7946 \
+  --network host \
   cache-server \
   -addr :8080 \
-  -id $NODE_ID \
+  -cluster-port 7946 \
+  -gossip-advertise-addr "$SELF_IP" \
+  -id "$SELF_IP:8080" \
+  -advertise-addr "$SELF_IP:8080" \
   -peers "$PEERS"
 
 echo "=== $NODE_ID setup complete ==="

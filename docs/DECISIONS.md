@@ -157,3 +157,21 @@
 - **Verified by test:**
   - `TestTTLConsistencyAcrossReplicas`: confirms primary and replica have identical expiry timestamps
   - `TestTTLExpirySynchronized`: confirms both replicas expire the key at the same wall-clock time
+
+## Post-Deploy Hardening (2026-09-05, production evidence from Lightsail + local repro)
+
+- **Context:** The CI/CD pipeline unmasked a chain of latent defects that unit tests never caught: each fix exposed the next stage (OIDC → Docker build → ECR auth → gossip → write path). All findings below were proven with CloudTrail logs, container logs, or live black-box probes — not assumed.
+- **Ring/gossip identity namespaces must agree:**
+  - Deploy used `-id node-N` while ring peers were `IP:port` strings, so every node built a divergent ring AND gossip liveness (`node-N`) never matched ring IDs (`IP:port`): all peers looked dead, rings disagreed on ownership, and failover paths received empty bodies (400s on ~50% of writes).
+  - Choice: nodes use `-id IP:8080` + `-advertise-addr IP:8080` everywhere (README, compose, k8s example, all deploy scripts). Identical ring sets on all nodes; liveness matches.
+  - Tradeoff accepted: node IDs are IPs, less pretty in logs than `node-N`.
+- **Gossip reachability (three compounding defects):**
+  - Seeds dialed the HTTP port while memberlist bound HTTP+1000 → seeds derived as `host(peer):gossip-port`, convention-aware (explicit uniform port vs default HTTP+1000).
+  - Gossip bound 127.0.0.1 when `-addr` host was empty → `connection refused` via Docker mapping; now binds 0.0.0.0 for empty hosts.
+  - Docker bridge NAT rewrote UDP probe sources so memberlist classified every probe "unexpected node" → containers run `--network host` with explicit `-gossip-advertise-addr` (public IP / service name).
+- **Restarted-empty primary shadowed replicas (proven live: 3 keys 404 cluster-wide after one restart):**
+  - `handleGet` on a primary miss now consults replicas via `/replica/get` before 404. Cost: extra probes on genuine misses (documented in README/API.md). No write-back healing yet — redundancy restores on next write.
+  - Verified by test: `TestPrimaryMissFallsBackToReplica`; verified live: 20/20 readable from all nodes after empty restart (was 17/20).
+- **Failover write body:** `forwardWithBody` handed the replica path a consumed body → 400. Body restored first. Verified by test: `TestDeadPrimarySetAcceptedByReplica` (fails without the fix).
+- **Quorum reads now enforce majority:** previously any single response (even a 404 error body decoded as zero-value) could answer; now fewer-than-majority is 503, non-200s are skipped, bodies always closed. Matches the documented contract; availability cost is the documented tradeoff.
+- **Robustness:** all node-to-node HTTP uses transports with dial + response-header timeouts (previously unbounded `DefaultTransport`); `/metrics` `pending_repls` read now holds the mutex (was a map race); `-mem-cap` flag wires LRU eviction at runtime (previously test-only); dead `updatedAt` field removed; unimplemented `CACHE_*` env vars removed from docs (flags are the only config).

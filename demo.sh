@@ -42,19 +42,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Start 3-node cluster
+# Start 3-node cluster.
+# Identity uses 127.0.0.1:port everywhere so ring, gossip, and liveness checks
+# all agree (short names like "node-a" diverge the rings and break routing).
+# -gossip-advertise-addr is required: without it memberlist advertises the
+# 0.0.0.0 bind address, which peers can never match.
 echo -e "${YELLOW}Starting 3-node cluster...${NC}"
-./cache-server -addr :8080 -id node-a > "${TMPDIR}/node-a.log" 2>&1 &
+./cache-server -addr :8080 -id 127.0.0.1:8080 -advertise-addr 127.0.0.1:8080 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8081,127.0.0.1:8082" > "${TMPDIR}/node-a.log" 2>&1 &
 NODE_A_PID=$!
 echo "  node-a started (PID: ${NODE_A_PID})"
 
 sleep 1
 
-./cache-server -addr :8081 -id node-b -peers ":8080" > "${TMPDIR}/node-b.log" 2>&1 &
+./cache-server -addr :8081 -id 127.0.0.1:8081 -advertise-addr 127.0.0.1:8081 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8082" > "${TMPDIR}/node-b.log" 2>&1 &
 NODE_B_PID=$!
 echo "  node-b started (PID: ${NODE_B_PID})"
 
-./cache-server -addr :8082 -id node-c -peers ":8080" > "${TMPDIR}/node-c.log" 2>&1 &
+./cache-server -addr :8082 -id 127.0.0.1:8082 -advertise-addr 127.0.0.1:8082 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8081" > "${TMPDIR}/node-c.log" 2>&1 &
 NODE_C_PID=$!
 echo "  node-c started (PID: ${NODE_C_PID})"
 
@@ -145,7 +149,7 @@ echo
 # Phase 5: Node recovery
 echo -e "${BLUE}--- Phase 5: Node recovery ---${NC}"
 echo -e "${YELLOW}Restarting node-b...${NC}"
-./cache-server -addr :8081 -id node-b -peers ":8080" > "${TMPDIR}/node-b.log" 2>&1 &
+./cache-server -addr :8081 -id 127.0.0.1:8081 -advertise-addr 127.0.0.1:8081 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8082" > "${TMPDIR}/node-b.log" 2>&1 &
 NODE_B_PID=$!
 echo "  node-b restarted (PID: ${NODE_B_PID})"
 

@@ -46,15 +46,11 @@ docker-compose logs -f node-a
 docker-compose down
 ```
 
-### With Monitoring (Prometheus + Grafana)
+### Monitoring
 
-```bash
-# Start with monitoring profile
-docker-compose --profile monitoring up -d
-
-# Access Grafana at http://localhost:3000 (admin/admin)
-# Access Prometheus at http://localhost:9090
-```
+`/metrics` returns JSON (not Prometheus exposition format) — scrape it with
+`curl`/`jq`. Native Prometheus/Grafana support is future work; there is
+currently no monitoring compose profile.
 
 ---
 
@@ -80,14 +76,20 @@ GOOS=linux GOARCH=arm64 go build -o cache-server-arm64 ./cmd/cache/
 
 ```bash
 # Terminal 1: Seed node
-./cache-server -addr :8080 -id node-a
+./cache-server -addr :8080 -id 127.0.0.1:8080 -advertise-addr 127.0.0.1:8080 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8081,127.0.0.1:8082"
 
 # Terminal 2: Join via node-a
-./cache-server -addr :8081 -id node-b -peers ":8080"
+./cache-server -addr :8081 -id 127.0.0.1:8081 -advertise-addr 127.0.0.1:8081 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8082"
 
 # Terminal 3: Join via node-a
-./cache-server -addr :8082 -id node-c -peers ":8080"
+./cache-server -addr :8082 -id 127.0.0.1:8082 -advertise-addr 127.0.0.1:8082 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8081"
 ```
+
+Identity must use `host:port` everywhere: every node builds its ring from the
+same ID set and gossip liveness is checked against those IDs. Short names
+(`-id node-a`) diverge the rings and break routing. Gossip ports default to
+HTTP+1000 per node (no `-cluster-port` needed locally); seeds are derived
+from the peer HTTP addresses automatically.
 
 ### Systemd Service (Linux)
 
@@ -246,10 +248,14 @@ spec:
       containers:
         - name: cache
           image: ghcr.io/yourusername/cache:latest
+          # Identity MUST be host:port on every node (ring/gossip/liveness
+          # namespaces must agree — short names diverge the rings).
           args:
             - "-addr=:8080"
-            - "-id=$(POD_NAME)"
+            - "-id=$(POD_NAME).cache-headless:8080"
+            - "-advertise-addr=$(POD_NAME).cache-headless:8080"
             - "-cluster-port=7946"
+            - "-gossip-advertise-addr=$(POD_NAME).cache-headless"
             - "-peers=cache-node-0.cache-headless:8080,cache-node-1.cache-headless:8080,cache-node-2.cache-headless:8080"
           env:
             - name: POD_NAME
@@ -496,18 +502,18 @@ az container create \
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-addr` | `:8080` | HTTP listen address |
-| `-id` | `<addr>` | Unique node ID |
-| `-peers` | `` | Comma-separated peer addresses |
-| `-cluster-port` | `<port>+1000` | Gossip protocol port |
+| `-id` | `<addr>` | Unique node ID — use `host:port` on every node so rings agree |
+| `-advertise-addr` | `<addr>` | Address advertised in ring (reachable self address) |
+| `-peers` | `` | Comma-separated peer HTTP addresses |
+| `-cluster-port` | `<port>+1000` | Gossip protocol port (0 = auto) |
+| `-gossip-advertise-addr` | `` | Host peers dial for gossip (required behind NAT/Docker) |
+| `-mem-cap` | `0` | Per-node memory cap in bytes for LRU eviction (0 = unlimited) |
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `CACHE_ID` | Node ID |
-| `CACHE_CLUSTER_PORT` | Gossip protocol port |
-| `CACHE_LOG_LEVEL` | Log level (debug, info, warn, error) |
-| `CACHE_MEM_CAP` | Memory cap in bytes (0 = unlimited) |
+None — all configuration is via command-line flags (see Configuration
+Reference above). Earlier revisions of this guide listed `CACHE_*` variables;
+they were never implemented and have been removed from the docs.
 
 ---
 

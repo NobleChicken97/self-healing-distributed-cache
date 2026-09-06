@@ -359,6 +359,14 @@ func (s *Server) handleRebalancePull(w http.ResponseWriter, r *http.Request) {
 	// Get the value locally.
 	value, err := s.store.Get(key)
 	if errors.Is(err, store.ErrNotFound) {
+		// The primary may have restarted with an empty store while replicas
+		// still hold the key (rolling deploys wipe in-memory state). Consult
+		// replicas before reporting 404 — a miss here costs extra probes per
+		// genuinely-absent key, which is the documented tradeoff.
+		if v, ok := s.readFromReplica(key); ok {
+			writeJSON(w, http.StatusOK, map[string]string{"key": key, "value": v})
+			return
+		}
 		writeError(w, http.StatusNotFound, "key not found")
 		return
 	}

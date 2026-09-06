@@ -27,16 +27,19 @@ echo [INFO] Logs will be saved to: %TMPDIR%
 echo.
 
 REM Start 3-node cluster
+REM Identity uses 127.0.0.1:port everywhere so ring, gossip, and liveness
+REM checks all agree. -gossip-advertise-addr is required: without it memberlist
+REM advertises the 0.0.0.0 bind address, which peers can never match.
 echo [CLUSTER] Starting 3-node cluster...
-start "Node A" /min cache-server.exe -addr :8080 -id node-a > %TMPDIR%\node-a.log 2>&1
+start "Node A" /min cache-server.exe -addr :8080 -id 127.0.0.1:8080 -advertise-addr 127.0.0.1:8080 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8081,127.0.0.1:8082" > %TMPDIR%\node-a.log 2>&1
 echo   node-a started
 timeout /t 2 /nobreak > nul
 
-start "Node B" /min cache-server.exe -addr :8081 -id node-b -peers ":8080" > %TMPDIR%\node-b.log 2>&1
+start "Node B" /min cache-server.exe -addr :8081 -id 127.0.0.1:8081 -advertise-addr 127.0.0.1:8081 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8082" > %TMPDIR%\node-b.log 2>&1
 echo   node-b started
 timeout /t 1 /nobreak > nul
 
-start "Node C" /min cache-server.exe -addr :8082 -id node-c -peers ":8080" > %TMPDIR%\node-c.log 2>&1
+start "Node C" /min cache-server.exe -addr :8082 -id 127.0.0.1:8082 -advertise-addr 127.0.0.1:8082 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8081" > %TMPDIR%\node-c.log 2>&1
 echo   node-c started
 
 REM Wait for cluster to stabilize
@@ -91,7 +94,7 @@ echo.
 REM Phase 5: Node recovery
 echo --- Phase 5: Node recovery ---
 echo [RECOVERY] Restarting node-b...
-start "Node B" /min cache-server.exe -addr :8081 -id node-b -peers ":8080" > %TMPDIR%\node-b.log 2>&1
+start "Node B" /min cache-server.exe -addr :8081 -id 127.0.0.1:8081 -advertise-addr 127.0.0.1:8081 -gossip-advertise-addr 127.0.0.1 -peers "127.0.0.1:8080,127.0.0.1:8082" > %TMPDIR%\node-b.log 2>&1
 echo [INFO] Waiting for recovery...
 timeout /t 5 /nobreak > nul
 echo.

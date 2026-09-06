@@ -74,6 +74,9 @@ Retrieve a value by key.
 **Behavior:**
 - Routes to the primary node for the key
 - Falls back to replica if primary is dead
+- If the primary is alive but no longer has the key (e.g. it restarted with
+  an empty store), replicas are consulted before 404 — genuinely absent keys
+  cost replica probes, which is the documented availability tradeoff
 - Returns 404 if key doesn't exist or has expired
 
 ---
@@ -166,7 +169,19 @@ Get a key with quorum consistency. Queries a majority of replicas and returns th
 }
 ```
 
-**Tradeoff:** Higher consistency, higher read latency.
+**Response (503):**
+```json
+{
+  "status": "quorum_failed",
+  "acks": 1,
+  "needed": 2,
+  "error": "majority of nodes unreachable"
+}
+```
+
+**Tradeoff:** Higher consistency, higher read latency. Unlike the default
+read path, quorum reads do NOT fall back to a single replica: fewer than a
+majority of responses is a 503, not a best-effort answer.
 
 ---
 
@@ -325,7 +340,7 @@ These endpoints are used internally by the cluster and should not be called dire
 |----------|-------------|
 | `/replica/set` | Receive replicated write from primary |
 | `/replica/delete` | Receive replicated delete from primary |
-| `/replica/get` | Serve key for quorum reads |
+| `/replica/get` | Serve local copy (quorum reads + primary-miss fallback) |
 | `/replica/quorum/set` | Receive quorum write from primary |
 | `/rebalance/accept` | Accept key during rebalance migration |
 | `/rebalance/pull` | Pull key from old owner during rebalance |
