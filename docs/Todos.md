@@ -241,4 +241,7 @@ failing-then-passing unit tests. `go test ./...` green (11 pkgs) throughout.
 - [x] Follow-ups fixed: async read healing (`entry_count` 0 → 3 live,
   `TestPrimaryMissFallsBackToReplica` extended), bounded retry tracking
   (`maxPendingAge`, `TestPendingReplicationAgesOut`, dead fields removed)
+- [x] Quorum reads enforce majority (503) + query full member set incl.
+  primary (`TestQuorumGetRequiresMajority`; fixed entry-as-replica blind spot
+  caught by existing `TestQuorumWriteAndRead`)
 - [ ] Final full suite + pipeline green on merged audit fixes

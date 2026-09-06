@@ -1170,8 +1170,9 @@ func (s *Server) replicateQuorumSet(replica ring.Node, key, value string, expire
 }
 
 // handleQuorumGet performs a quorum read: queries a majority of replicas and
-// returns the most recent value (highest version). This provides read-after-write
-// consistency at the cost of higher read latency.
+// returns the most recent value (highest version). It answers only when a
+// majority of nodes responded, otherwise 503 — read-after-write consistency
+// at the cost of higher read latency and lower availability than plain reads.
 func (s *Server) handleQuorumGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method must be GET")
@@ -1200,9 +1201,17 @@ func (s *Server) handleQuorumGet(w http.ResponseWriter, r *http.Request) {
 
 	// Query replicas via the bounded transport (never the unbounded default
 	// client — a hung replica must not hang the quorum read).
+	// The replication group is the primary plus its replicas: query every
+	// member except self (local counts as our vote). Querying only
+	// ring-replicas would miss the primary whenever this node is itself a
+	// replica or an outsider, making a majority unreachable by construction.
 	replicas := s.ring.Replicas(key, s.replicationFactor)
+	members := append([]ring.Node{}, replicas...)
+	if primary, ok := s.ring.Lookup(key); ok && primary.ID != "" {
+		members = append(members, primary) // Replicas() never includes the primary
+	}
 	client := &http.Client{Transport: s.transport}
-	for _, replica := range replicas {
+	for _, replica := range members {
 		if replica.ID == s.nodeID {
 			continue
 		}
@@ -1229,6 +1238,22 @@ func (s *Server) handleQuorumGet(w http.ResponseWriter, r *http.Request) {
 
 	if len(responses) == 0 {
 		writeError(w, http.StatusNotFound, "key not found")
+		return
+	}
+
+	// A quorum read only answers when a majority of nodes responded — that is
+	// the documented contract. Answering from a minority would silently
+	// violate read-after-write consistency (e.g. one stale replica
+	// outvoting two fresh nodes that are briefly unreachable).
+	totalNodes := len(replicas) + 1 // +1 for this node
+	quorumNeeded := (totalNodes / 2) + 1
+	if len(responses) < quorumNeeded {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"status": "quorum_failed",
+			"acks":   len(responses),
+			"needed": quorumNeeded,
+			"error":  "majority of nodes unreachable",
+		})
 		return
 	}
 

@@ -732,6 +732,98 @@ func TestPendingReplicationAgesOut(t *testing.T) {
 	}
 }
 
+// TestQuorumGetRequiresMajority verifies the documented quorum contract: a
+// quorum read answers only when a majority of nodes responded, otherwise 503
+// — even when a minority holds the data. (Best-of-available would silently
+// violate read-after-write.)
+func TestQuorumGetRequiresMajority(t *testing.T) {
+	storeA := store.New(time.Second)
+	defer storeA.Close()
+	storeB := store.New(time.Second)
+	defer storeB.Close()
+
+	tsA := httptest.NewServer(nil)
+	defer tsA.Close()
+	tsB := httptest.NewServer(nil)
+	defer tsB.Close()
+
+	r := ring.New(10)
+	r.AddNode(ring.Node{ID: "node-a", Addr: tsA.Listener.Addr().String()})
+	r.AddNode(ring.Node{ID: "node-b", Addr: tsB.Listener.Addr().String()})
+	r.AddNode(ring.Node{ID: "node-c", Addr: "127.0.0.1:19203"}) // dead: nothing listens
+
+	serverA := New(storeA, "node-a", r)
+	serverB := New(storeB, "node-b", r)
+	tsA.Config.Handler = serverA.Handler()
+	tsB.Config.Handler = serverB.Handler()
+
+	// Find a key whose replicas (RF=2) include live node-b.
+	var testKey string
+	for i := 0; i < 1000; i++ {
+		key := fmt.Sprintf("quorum-majority-%d", i)
+		for _, rep := range r.Replicas(key, 2) {
+			if rep.ID == "node-b" {
+				testKey = key
+				goto found
+			}
+		}
+	}
+	t.Fatal("could not find a suitable key for testing")
+found:
+
+	// Seed the key ONLY on node-b: a minority (1 of 3 nodes) holds it.
+	seedBody := fmt.Sprintf(`{"key":"%s","value":"minority-value","ttl_ms":60000}`, testKey)
+	resp, err := http.Post(tsB.URL+"/replica/set?key="+testKey, "application/json", strings.NewReader(seedBody))
+	if err != nil {
+		t.Fatalf("seed request failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("seed failed: status=%d", resp.StatusCode)
+	}
+
+	// Quorum read via node-a: only 1 of 3 nodes responds -> 503, not 200.
+	resp, err = http.Get(tsA.URL + "/quorum/get?key=" + testKey)
+	if err != nil {
+		t.Fatalf("quorum get request failed: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 without majority, got %d body=%s", resp.StatusCode, string(body))
+	}
+	if !strings.Contains(string(body), "quorum_failed") {
+		t.Fatalf("expected quorum_failed body, got %s", string(body))
+	}
+
+	// Seed node-a too (majority now holds it) -> 200 with highest version.
+	seedA := fmt.Sprintf(`{"key":"%s","value":"majority-value","ttl_ms":60000}`, testKey)
+	resp, err = http.Post(tsA.URL+"/replica/set?key="+testKey, "application/json", strings.NewReader(seedA))
+	if err != nil {
+		t.Fatalf("seed request failed: %v", err)
+	}
+	resp.Body.Close()
+	resp, err = http.Get(tsA.URL + "/quorum/get?key=" + testKey)
+	if err != nil {
+		t.Fatalf("quorum get request failed: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with majority, got %d body=%s", resp.StatusCode, string(body))
+	}
+
+	// A key held nowhere still 404s (distinct from quorum failure).
+	resp, err = http.Get(tsA.URL + "/quorum/get?key=never-existed-" + testKey)
+	if err != nil {
+		t.Fatalf("quorum get request failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for absent key, got %d", resp.StatusCode)
+	}
+}
+
 // TestDeadPrimarySetAcceptedByReplica verifies that a write for a key whose
 // primary is known dead is accepted by a replica with the FULL reconstructed
 // body. Regression test: forwardWithBody used to hand forwardToReplica an
