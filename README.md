@@ -237,6 +237,36 @@ The demo will:
 4. Verify data remains accessible
 5. Recover the failed node
 
+## Field Console (shdc.noblechicken.me)
+
+Every node serves a live operations dashboard at `/` — same-origin, so it
+calls the cluster API directly with no proxy or keys:
+
+- **Mesh**: live SVG topology (hash ring + SWIM probes) with per-node ledgers
+- **Ledger**: write/read/delete console with latency + status inspector
+- **Labs**: quorum round-trip and a 15-second synchronized-TTL drill
+- **Telemetry**: entries, memory, pending replications, rebalance trigger
+- **Wiring**: endpoint ledger and curl examples
+
+```bash
+# Local preview: the page at / IS the console
+go run ./cmd/cache -addr :8080 -id 127.0.0.1:8080 -peers "127.0.0.1:8081"
+# open http://localhost:8080/
+```
+
+Production URL (after adding the Namecheap `A` records below):
+
+```text
+http://shdc.noblechicken.me:8080/
+```
+
+DNS setup (Namecheap → Advanced DNS): three `A` records, host `shdc`,
+values `13.126.24.246`, `13.127.78.189`, `15.252.208.189`. Round-robin
+across all nodes is deliberate — each serves the console and the full API.
+Port `:8080` is required (nodes don't listen on :80; a Caddy upgrade could
+change that later). `website/` holds the dashboard source; `website.go`
+embeds it into the binary.
+
 ## Decision Log
 
 See [DECISIONS.md](./docs/DECISIONS.md) for detailed tradeoff analysis of every major
